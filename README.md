@@ -35,7 +35,7 @@ the adversarial polytope to lower bound the output. This lower bound can be
 expressed as another deep network with the same model parameters, and
 optimizing this lower bound allows us to guarantee robustness of the network.
 
-The long version: see our paper, [Provable defenses against adversarial examples via the convex outer adversarial polytope, on arxiv](). 
+The long version: see our paper, [Provable defenses against adversarial examples via the convex outer adversarial polytope](https://arxiv.org/abs/1711.00851). 
 
 ## What difference does this make? 
 We illustrate the power of training robust networks in the following two scenarios: 2D toy case for a visualization, and on the MNIST dataset. 
@@ -92,7 +92,8 @@ robustness.
 ## What is in this repository? 
 + The code implementing the robust loss function that measures the convex
   outer bounds on the adversarial polytope as described in the paper. It is
-  implemented for linear and convolutional networks with ReLU activation
+  implemented for linear and convolutional networks with ReLU activation on all
+  layers except the last. 
 + Examples, containing the following: 
   + Code to train a robust classifier for the MNIST, Fashion-MNIST, HAR, and SVHN datasets. 
   + Code to generate and plot the 2D toy example.
