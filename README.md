@@ -35,7 +35,7 @@ the adversarial polytope to lower bound the output. This lower bound can be
 expressed as another deep network with the same model parameters, and
 optimizing this lower bound allows us to guarantee robustness of the network.
 
-The long version: see our paper, [Provable defenses against adversarial examples via the convex outer adversarial polytope, on arxiv](). 
+The long version: see our paper, [Provable defenses against adversarial examples via the convex outer adversarial polytope](https://arxiv.org/abs/1711.00851). 
 
 ## What difference does this make? 
 We illustrate the power of training robust networks in the following two scenarios: 2D toy case for a visualization, and on the MNIST dataset. 
