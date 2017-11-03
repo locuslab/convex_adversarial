@@ -92,7 +92,8 @@ robustness.
 ## What is in this repository? 
 + The code implementing the robust loss function that measures the convex
   outer bounds on the adversarial polytope as described in the paper. It is
-  implemented for linear and convolutional networks with ReLU activation
+  implemented for linear and convolutional networks with ReLU activation on all
+  layers except the last. 
 + Examples, containing the following: 
   + Code to train a robust classifier for the MNIST, Fashion-MNIST, HAR, and SVHN datasets. 
   + Code to generate and plot the 2D toy example.
