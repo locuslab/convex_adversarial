@@ -50,7 +50,6 @@ class DualNetBounds:
         for a in self.affine: 
             _ = a(_)
             
-            
         self.biases = [full_bias(l, self.affine[i].out_features) 
                         for i,l in enumerate(self.layers)]
         
@@ -61,7 +60,7 @@ class DualNetBounds:
         
         self.zl = [nu_hat.view(-1) + gamma[0].view(-1) - epsilon*(nu_hat_).abs().sum(0)]
         self.zu = [nu_hat.view(-1) + gamma[0].view(-1) + epsilon*(nu_hat_).abs().sum(0)]
-        
+
         self.I = []
         self.I_empty = []
         self.I_neg = []
@@ -87,7 +86,6 @@ class DualNetBounds:
             else:
                 nu.append(Variable(torch.zeros(self.affine[i+1].out_features,1)).type_as(x))         
             gamma.append(self.biases[i+1])
-            
             # propagate terms
             gamma[0] = self.affine[i+1](d * gamma[0])
             for j in range(1,i+1):
@@ -160,7 +158,7 @@ class DualNetBounds:
         return self.alpha_ind[-1]
 
 
-def robust_loss(net, epsilon, X, y):
+def robust_loss(net, epsilon, X, y, alpha='default'):
     num_classes = net[-1].out_features
     ce_loss = 0.0
     err = 0.0
@@ -170,8 +168,17 @@ def robust_loss(net, epsilon, X, y):
         c = Variable((torch.eye(num_classes)[:,y.data[i]] - torch.eye(num_classes)))
         if X.is_cuda:
             c = c.cuda()
-        alpha = dual.opt_alpha_default(c)
-        f = -dual.g(c, alpha)
+
+        if alpha == 'default': 
+            a = dual.opt_alpha_default(c)
+        elif alpha == 'fgs': 
+            a = dual.opt_alpha_fgs(c)
+        elif alpha == 'Adam': 
+            a = dual.opt_alpha_adam(c)
+        else:
+            raise ValueError('Unknown alpha type, must be ["default", "fgs", "Adam"]')
+
+        f = -dual.g(c, a)
         
         err += (f.data.max(0)[1] != y.data[i]).float()
         #hinge_loss += ((Variable(1-torch.eye(num_classes)[:,y[i]]) + f).max()).clamp(min=0)
