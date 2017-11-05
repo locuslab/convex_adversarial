@@ -4,6 +4,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.autograd import Variable
 
+import setGPU
 import numpy as np
 import cvxpy as cp
 
@@ -15,7 +16,7 @@ import torchvision.datasets as datasets
 import setproctitle
 import argparse
 
-def train_robust(loader, model, opt, epsilon, epoch, log):
+def train_robust(loader, model, opt, epsilon, epoch, log, alpha):
     model.train()
     if epoch == 0:
         blank_state = opt.state_dict()
@@ -24,7 +25,8 @@ def train_robust(loader, model, opt, epsilon, epoch, log):
         X,y = X.cuda(), y.cuda()
 
         robust_ce, robust_err = robust_loss(model, epsilon, 
-                                             Variable(X), Variable(y))
+                                             Variable(X), Variable(y),
+                                             alpha=alpha)
         out = model(Variable(X))
         ce = nn.CrossEntropyLoss()(out, Variable(y))
         err = (out.data.max(1)[1] != y).float().sum()  / X.size(0)
@@ -38,12 +40,13 @@ def train_robust(loader, model, opt, epsilon, epoch, log):
         log.flush()
 
 
-def evaluate_robust(loader, model, epsilon, epoch, log):
+def evaluate_robust(loader, model, epsilon, epoch, log, alpha):
     model.eval()
     for i, (X,y) in enumerate(loader):
         X,y = X.cuda(), y.cuda()
         robust_ce, robust_err = robust_loss(model, epsilon, 
-                                            Variable(X), Variable(y))
+                                            Variable(X), Variable(y),
+                                            alpha=alpha)
         out = model(Variable(X))
         ce = nn.CrossEntropyLoss()(out, Variable(y))
         err = (out.data.max(1)[1] != y).float().sum()  / X.size(0)
@@ -65,6 +68,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--epsilon", type=float, default=0.1)
     parser.add_argument('--prefix')
+    parser.add_argument('--alpha', default='default')
     args = parser.parse_args()
     args.prefix = args.prefix or 'mnist_conv_{:.4f}_{:.4f}_0'.format(args.epsilon, args.lr).replace(".","_")
     setproctitle.setproctitle(args.prefix)
@@ -93,6 +97,6 @@ if __name__ == "__main__":
 
     opt = optim.Adam(model.parameters(), lr=args.lr)
     for t in range(args.epochs):
-        train_robust(train_loader, model, opt, args.epsilon, t, train_log)
-        evaluate_robust(test_loader, model, args.epsilon, t, test_log)
+        train_robust(train_loader, model, opt, args.epsilon, t, train_log, args.alpha)
+        evaluate_robust(test_loader, model, args.epsilon, t, test_log, args.alpha)
         torch.save(model.state_dict(), args.prefix + "_model.pth")
