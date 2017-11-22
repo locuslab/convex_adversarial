@@ -71,9 +71,9 @@ class DualNetBounds:
 
         for i in range(0,self.k-2):
             # compute sets and activation
-            self.I_neg.append(self.zu[-1] <= 0)
-            self.I_pos.append(self.zl[-1] > 0)
-            self.I.append((self.zu[-1] > 0) * (self.zl[-1] < 0))
+            self.I_neg.append((self.zu[-1] <= 0).detach())
+            self.I_pos.append((self.zl[-1] > 0).detach())
+            self.I.append(((self.zu[-1] > 0) * (self.zl[-1] < 0)).detach())
             self.I_empty.append(self.I[-1].data.long().sum() == 0)
             d = self.I_pos[-1].type_as(x) + (self.zu[-1]/(self.zu[-1] - self.zl[-1]))*self.I[-1].type_as(x)
             
@@ -106,6 +106,7 @@ class DualNetBounds:
         
             
     def g(self, c):
+        # print("serialized start")
         nu = [[]]*self.k
         nu[-1] = -c
         for i in range(self.k-2,-1,-1):
@@ -121,6 +122,9 @@ class DualNetBounds:
              - self.epsilon*nu[0].abs().sum(1)
              + sum((nu[i].clamp(min=0)*self.zl[i-1][None,:])[self.I[i-1].expand_as(nu[i])].view(nu[i].size(0),-1).sum(1)
                    for i in range(1,self.k-1) if not self.I_empty[i-1]))
+        # for n in nu:
+        #     print(n)
+        # print(f.data)
         return f
 
 class DualNetBoundsBatch: 
@@ -157,38 +161,44 @@ class DualNetBoundsBatch:
 
         for i in range(0,self.k-2):
             # compute sets and activation
-            self.I_neg.append(self.zu[-1] <= 0)
-            self.I_pos.append(self.zl[-1] > 0)
-            self.I.append((self.zu[-1] > 0) * (self.zl[-1] < 0))
+            self.I_neg.append((self.zu[-1] <= 0).detach())
+            self.I_pos.append((self.zl[-1] > 0).detach())
+            self.I.append(((self.zu[-1] > 0) * (self.zl[-1] < 0)).detach())
             self.I_empty.append(self.I[-1].data.long().sum() == 0)
             d = self.I_pos[-1].type_as(X) + (self.zu[-1]/(self.zu[-1] - self.zl[-1]))*self.I[-1].type_as(X)
 
             # indices of [example idx, origin crossing feature idx]
-            I_ind.append(self.I[-1].data.nonzero())
+            I_ind.append(Variable(self.I[-1].data.nonzero()))
             
             # initialize new terms
             if not self.I_empty[-1]:
                 out_features = self.affine[i+1].out_features
 
                 subset_eye = Variable(X.data.new(self.I[-1].data.sum(), d.size(1)).zero_())
-                subset_eye.scatter_(1, Variable(I_ind[-1][:,1,None]), d[self.I[-1]][:,None])
+                subset_eye.scatter_(1, I_ind[-1][:,1,None], d[self.I[-1]][:,None])
+                print(i,subset_eye.size(), "subset eye")
                 nu.append(self.affine[i+1](subset_eye).t())
+                # print(nu[-1].size())
+
+                I_collapse.append(Variable(X.data.new(I_ind[-1].size(0), X.size(0)).zero_()))
+                I_collapse[-1].scatter_(1, I_ind[-1][:,0][:,None], 1)
             else:
-                nu.append(Variable(torch.zeros(self.affine[i+1].out_features,1)).type_as(x))         
+                nu.append(Variable(torch.zeros(1, self.affine[i+1].out_features)).type_as(X))         
+                I_collapse.append(None)
             gamma.append(self.biases[i+1])
             # propagate terms
             gamma[0] = self.affine[i+1](d * gamma[0])
             for j in range(1,i+1):
+                print(i,j,gamma[j].size(), 'gamma')
                 gamma[j] = self.affine[i+1](d * gamma[j])
                 nu[j-1] = self.affine[i+1]((d[I_ind[j-1][:,0]].t() * nu[j-1]).t()).t()
 
+            print(i, nu_hat_.size())
             nu_hat = self.affine[i+1](d*nu_hat)
-            nu_hat_ = self.affine[i+1](d.unsqueeze(1)*nu_hat_)
-
+            nu_hat_ = self.affine[i+1]((d.unsqueeze(1)*nu_hat_).view(-1, d.size(1))).view(d.size(0), nu_hat_.size(1), -1)
+            print("uh oh")
             # create a matrix that collapses the minibatch of origin-crossing indices 
             # back to the sum of each minibatch
-            I_collapse.append(Variable(X.data.new(I_ind[-1].size(0), X.size(0))))
-            I_collapse[-1].scatter_(1, I_ind[-1][:,0][:,None], 1)
 
             # compute bounds
             self.zl.append(nu_hat + sum(gamma) - epsilon*nu_hat_.abs().sum(1) + 
@@ -201,6 +211,7 @@ class DualNetBoundsBatch:
         self.s = [(u/(u-l)) for l,u in zip(self.zl, self.zu)]
         
     def g(self, c):
+        # print("minibatched start")
         nu = [[]]*self.k
         nu[-1] = -c
         for i in range(self.k-2,-1,-1):
@@ -211,28 +222,46 @@ class DualNetBoundsBatch:
                     nu[i][self.I[i-1].unsqueeze(1)] = (self.s[i-1][self.I[i-1]].unsqueeze(1).repeat(1,nu[i].size(1)).view(-1) * 
                                                            nu[i][self.I[i-1].unsqueeze(1)])
 
+        # for i in range(self.k-1): 
+        #     print(nu[i+1].size(), self.biases[i].size())
+        # print(nu[0].size(), self.X.size())
+        # print(nu[0].matmul(self.X.unsqueeze(2)).squeeze(2).size())
+        # for i in range(1, self.k-1): 
+        #     if not self.I_empty[i-1]: 
+        #         print((nu[i].clamp(min=0)*self.zl[i-1].unsqueeze(1)).matmul(self.I[i-1].type_as(self.X).unsqueeze(2)).squeeze(2).size())
         f = (-sum(nu[i+1].matmul(self.biases[i].view(-1)) for i in range(self.k-1))
-             -nu[0].matmul(self.X.unsqueeze(2)).squeeze(2)
+             -nu[0].matmul(self.X.view(self.X.size(0),-1).unsqueeze(2)).squeeze(2)
              -self.epsilon*nu[0].abs().sum(2)
              + sum((nu[i].clamp(min=0)*self.zl[i-1].unsqueeze(1)).matmul(self.I[i-1].type_as(self.X).unsqueeze(2)).squeeze(2) 
                     for i in range(1, self.k-1) if not self.I_empty[i-1]))
+        # for n in nu:
+        #     print(n)
+        # print(f.data)
         return f
 
 def robust_loss(net, epsilon, X, y):
     num_classes = net[-1].out_features
     ce_loss = 0.0
     err = 0.0
-    
-    for i in range(X.size(0)):
-        dual = DualNetBounds(net, X[i], epsilon)
-        c = Variable((torch.eye(num_classes)[:,y.data[i]] - torch.eye(num_classes)))
-        if X.is_cuda:
-            c = c.cuda()
 
-        f = -dual.g(c)
+    dual = DualNetBoundsBatch(net, X, epsilon)
+    c = Variable(torch.eye(num_classes).type_as(X.data)[y.data].unsqueeze(1) - torch.eye(num_classes).type_as(X.data).unsqueeze(0))
+    if X.is_cuda:
+        c = c.cuda()
+    f = -dual.g(c)
+    err = (f.data.max(1)[1] != y.data).sum()
+    ce_loss = nn.CrossEntropyLoss()(f, y)
+    
+    # for i in range(X.size(0)):
+    #     dual = DualNetBounds(net, X[i], epsilon)
+    #     c = Variable((torch.eye(num_classes)[:,y.data[i]] - torch.eye(num_classes)))
+    #     if X.is_cuda:
+    #         c = c.cuda()
+
+    #     f = -dual.g(c)
         
-        err += (f.data.max(0)[1] != y.data[i]).float()
-        #hinge_loss += ((Variable(1-torch.eye(num_classes)[:,y[i]]) + f).max()).clamp(min=0)
-        ce_loss += nn.CrossEntropyLoss()(f[None,:], y[i:i+1])
+    #     err += (f.data.max(0)[1] != y.data[i]).float()
+    #     #hinge_loss += ((Variable(1-torch.eye(num_classes)[:,y[i]]) + f).max()).clamp(min=0)
+    #     ce_loss += nn.CrossEntropyLoss()(f[None,:], y[i:i+1])
         
     return ce_loss/X.size(0), err/X.size(0)

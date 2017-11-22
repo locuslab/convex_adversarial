@@ -16,17 +16,17 @@ import torchvision.datasets as datasets
 import setproctitle
 import argparse
 
-def train_robust(loader, model, opt, epsilon, epoch, log, alpha):
+def train_robust(loader, model, opt, epsilon, epoch, log):
     model.train()
     if epoch == 0:
         blank_state = opt.state_dict()
 
     for i, (X,y) in enumerate(loader):
+        print(i)
         X,y = X.cuda(), y.cuda()
 
         robust_ce, robust_err = robust_loss(model, epsilon, 
-                                             Variable(X), Variable(y),
-                                             alpha=alpha)
+                                             Variable(X), Variable(y))
         out = model(Variable(X))
         ce = nn.CrossEntropyLoss()(out, Variable(y))
         err = (out.data.max(1)[1] != y).float().sum()  / X.size(0)
@@ -35,18 +35,19 @@ def train_robust(loader, model, opt, epsilon, epoch, log, alpha):
         robust_ce.backward()
         opt.step()
 
-        print(epoch, i, robust_ce.data[0], robust_err[0], ce.data[0], err, file=log)
-        print(epoch, i, robust_ce.data[0], robust_err[0], ce.data[0], err)
+        print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err, file=log)
+        print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err)
         log.flush()
+        
+        assert False
 
 
-def evaluate_robust(loader, model, epsilon, epoch, log, alpha):
+def evaluate_robust(loader, model, epsilon, epoch, log):
     model.eval()
     for i, (X,y) in enumerate(loader):
         X,y = X.cuda(), y.cuda()
         robust_ce, robust_err = robust_loss(model, epsilon, 
-                                            Variable(X), Variable(y),
-                                            alpha=alpha)
+                                            Variable(X), Variable(y))
         out = model(Variable(X))
         ce = nn.CrossEntropyLoss()(out, Variable(y))
         err = (out.data.max(1)[1] != y).float().sum()  / X.size(0)
@@ -95,8 +96,18 @@ if __name__ == "__main__":
         nn.Linear(100, 10)
     ).cuda()
 
+
+    for X,y in test_loader:
+        X = X.cuda()
+        y = y.cuda()
+        break
+    epsilon = 0.1
+    from convex_adversarial import robust_loss
+    ce_loss, ce_err = robust_loss(model, epsilon, Variable(X), Variable(y))
+    ce_loss.backward()
+
     opt = optim.Adam(model.parameters(), lr=args.lr)
-    for t in range(args.epochs):
-        train_robust(train_loader, model, opt, args.epsilon, t, train_log, args.alpha)
-        evaluate_robust(test_loader, model, args.epsilon, t, test_log, args.alpha)
-        torch.save(model.state_dict(), args.prefix + "_model.pth")
+    # for t in range(args.epochs):
+        # train_robust(train_loader, model, opt, args.epsilon, t, train_log)
+        # evaluate_robust(test_loader, model, args.epsilon, t, test_log)
+        # torch.save(model.state_dict(), args.prefix + "_model.pth")
