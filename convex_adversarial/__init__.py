@@ -1,1 +1,1 @@
-from .dual import DualNetBounds, DualNetBoundsBatch, robust_loss
+from .dual import DualNetBounds, DualNetBoundsBatch, robust_loss, robust_loss_batch

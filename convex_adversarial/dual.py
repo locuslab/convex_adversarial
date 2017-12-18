@@ -114,6 +114,10 @@ class DualNetBounds:
             if i > 0:
                 nu[i][self.I_neg[i-1].expand_as(nu[i])] = 0
                 if not self.I_empty[i-1]:
+                    #print(self.s[i-1][self.I[i-1]].repeat(nu[i].size(0)))
+                    # print((self.s[i-1][self.I[i-1]].repeat(nu[i].size(0)) * 
+                    #                                        nu[i][self.I[i-1].expand_as(nu[i])]))
+                    #assert False
                     nu[i][self.I[i-1].expand_as(nu[i])] = (self.s[i-1][self.I[i-1]].repeat(nu[i].size(0)) * 
                                                            nu[i][self.I[i-1].expand_as(nu[i])])
         
@@ -219,7 +223,11 @@ class DualNetBoundsBatch:
             if i > 0:
                 nu[i][self.I_neg[i-1].unsqueeze(1)] = 0
                 if not self.I_empty[i-1]:
-                    nu[i][self.I[i-1].unsqueeze(1)] = (self.s[i-1][self.I[i-1]].unsqueeze(1).repeat(1,nu[i].size(1)).view(-1) * 
+                    #print((self.s[i-1][self.I[i-1]]).size(), nu[i].size(1))
+                    #print((self.s[i-1][self.I[i-1]]).repeat(nu[i].size(1)))
+                    # print((self.s[i-1][self.I[i-1]].unsqueeze(1).repeat(1,nu[i].size(1)).view(-1) * 
+                    #                                        nu[i][self.I[i-1].unsqueeze(1)]))
+                    nu[i][self.I[i-1].unsqueeze(1)] = ((self.s[i-1][self.I[i-1]]).repeat(nu[i].size(1)) * 
                                                            nu[i][self.I[i-1].unsqueeze(1)])
 
         # for i in range(self.k-1): 
@@ -243,6 +251,28 @@ def robust_loss(net, epsilon, X, y):
     num_classes = net[-1].out_features
     ce_loss = 0.0
     err = 0.0
+    # not batched
+    for i in range(X.size(0)):
+        dual = DualNetBounds(net, X[i], epsilon)
+        c = Variable((torch.eye(num_classes)[:,y.data[i]] - torch.eye(num_classes)))
+        if X.is_cuda:
+            c = c.cuda()
+
+        f = -dual.g(c)
+        
+        err += (f.data.max(0)[1] != y.data[i]).float()[0]
+        #hinge_loss += ((Variable(1-torch.eye(num_classes)[:,y[i]]) + f).max()).clamp(min=0)
+        ce_loss += nn.CrossEntropyLoss()(f[None,:], y[i:i+1])
+        
+    # print(ce_loss.data[0]/X.size(0))
+    # assert False
+    return ce_loss/X.size(0), err/X.size(0)
+
+
+def robust_loss_batch(net, epsilon, X, y):
+    num_classes = net[-1].out_features
+    ce_loss = 0.0
+    err = 0.0
     # batched
     dual = DualNetBoundsBatch(net, X, epsilon)
     c = Variable(torch.eye(num_classes).type_as(X.data)[y.data].unsqueeze(1) - torch.eye(num_classes).type_as(X.data).unsqueeze(0))
@@ -253,22 +283,3 @@ def robust_loss(net, epsilon, X, y):
     ce_loss = nn.CrossEntropyLoss()(f, y)
     # print(ce_loss.data[0])
     return ce_loss, err
-    
-    # ce_loss = 0.0
-    # err = 0.0
-    # # not batched
-    # for i in range(X.size(0)):
-    #     dual = DualNetBounds(net, X[i], epsilon)
-    #     c = Variable((torch.eye(num_classes)[:,y.data[i]] - torch.eye(num_classes)))
-    #     if X.is_cuda:
-    #         c = c.cuda()
-
-    #     f = -dual.g(c)
-        
-    #     err += (f.data.max(0)[1] != y.data[i]).float()
-    #     #hinge_loss += ((Variable(1-torch.eye(num_classes)[:,y[i]]) + f).max()).clamp(min=0)
-    #     ce_loss += nn.CrossEntropyLoss()(f[None,:], y[i:i+1])
-        
-    # print(ce_loss.data[0]/X.size(0))
-    # assert False
-    # return ce_loss/X.size(0), err/X.size(0)
