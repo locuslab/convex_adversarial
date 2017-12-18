@@ -8,7 +8,7 @@ import setGPU
 import numpy as np
 import cvxpy as cp
 
-from convex_adversarial import DualNetBounds, robust_loss
+from convex_adversarial import DualNetBounds, robust_loss_batch
 
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
@@ -24,7 +24,7 @@ def train_robust(loader, model, opt, epsilon, epoch, log):
     for i, (X,y) in enumerate(loader):
         X,y = X.cuda(), y.cuda()
 
-        robust_ce, robust_err = robust_loss(model, epsilon, 
+        robust_ce, robust_err = robust_loss_batch(model, epsilon, 
                                              Variable(X), Variable(y))
         out = model(Variable(X))
         ce = nn.CrossEntropyLoss()(out, Variable(y))
@@ -46,7 +46,7 @@ def evaluate_robust(loader, model, epsilon, epoch, log):
     model.eval()
     for i, (X,y) in enumerate(loader):
         X,y = X.cuda(), y.cuda()
-        robust_ce, robust_err = robust_loss(model, epsilon, 
+        robust_ce, robust_err = robust_loss_batch(model, epsilon, 
                                             Variable(X), Variable(y))
         out = model(Variable(X))
         ce = nn.CrossEntropyLoss()(out, Variable(y))
