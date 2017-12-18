@@ -227,8 +227,16 @@ class DualNetBoundsBatch:
                     #print((self.s[i-1][self.I[i-1]]).repeat(nu[i].size(1)))
                     # print((self.s[i-1][self.I[i-1]].unsqueeze(1).repeat(1,nu[i].size(1)).view(-1) * 
                     #                                        nu[i][self.I[i-1].unsqueeze(1)]))
-                    nu[i][self.I[i-1].unsqueeze(1)] = ((self.s[i-1][self.I[i-1]]).repeat(nu[i].size(1)) * 
+                    # print(nu[i][self.I[i-1].unsqueeze(1)].size(), nu[i].size(),
+                    #     self.I[i-1].size())
+                    # print(self.s[i-1].size())
+                    # print(self.s[i-1].unsqueeze(1).expand(*nu[i].size())
+                    #     [self.I[i-1].unsqueeze(1)].size())
+                    nu[i][self.I[i-1].unsqueeze(1)] = (self.s[i-1].unsqueeze(1).expand(*nu[i].size())[self.I[i-1].unsqueeze(1)] * 
                                                            nu[i][self.I[i-1].unsqueeze(1)])
+                    # nu[i][self.I[i-1].unsqueeze(1)] = ((self.s[i-1][self.I[i-1]]).repeat(nu[i].size(1)) * 
+                    #                                        nu[i][self.I[i-1].unsqueeze(1)])
+                    # assert False
 
         # for i in range(self.k-1): 
         #     print(nu[i+1].size(), self.biases[i].size())
