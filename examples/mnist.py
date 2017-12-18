@@ -22,7 +22,6 @@ def train_robust(loader, model, opt, epsilon, epoch, log):
         blank_state = opt.state_dict()
 
     for i, (X,y) in enumerate(loader):
-        print(i)
         X,y = X.cuda(), y.cuda()
 
         robust_ce, robust_err = robust_loss(model, epsilon, 
@@ -39,7 +38,6 @@ def train_robust(loader, model, opt, epsilon, epoch, log):
         print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err)
         log.flush()
         
-        assert False
 
 
 def evaluate_robust(loader, model, epsilon, epoch, log):
@@ -97,17 +95,17 @@ if __name__ == "__main__":
     ).cuda()
 
 
-    for X,y in test_loader:
-        X = X.cuda()
-        y = y.cuda()
-        break
-    epsilon = 0.1
-    from convex_adversarial import robust_loss
-    ce_loss, ce_err = robust_loss(model, epsilon, Variable(X), Variable(y))
-    ce_loss.backward()
+    # for X,y in test_loader:
+    #     X = X.cuda()
+    #     y = y.cuda()
+    #     break
+    # epsilon = 0.1
+    # from convex_adversarial import robust_loss
+    # ce_loss, ce_err = robust_loss(model, epsilon, Variable(X), Variable(y))
+    # ce_loss.backward()
 
     opt = optim.Adam(model.parameters(), lr=args.lr)
-    # for t in range(args.epochs):
-        # train_robust(train_loader, model, opt, args.epsilon, t, train_log)
-        # evaluate_robust(test_loader, model, args.epsilon, t, test_log)
-        # torch.save(model.state_dict(), args.prefix + "_model.pth")
+    for t in range(args.epochs):
+        train_robust(train_loader, model, opt, args.epsilon, t, train_log)
+        evaluate_robust(test_loader, model, args.epsilon, t, test_log)
+        torch.save(model.state_dict(), args.prefix + "_model.pth")

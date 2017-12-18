@@ -4,6 +4,24 @@ import torch.nn as nn
 from torch.autograd import Variable
 import torch.nn.functional as F
 
+def conv2d(x, *args, **kwargs): 
+    i = 0
+    out = []
+    batch_size = 10000
+    while i < x.size(0): 
+        out.append(F.conv2d(x[i:min(i+batch_size, x.size(0))], *args, **kwargs))
+        i += batch_size
+    return torch.cat(out, 0)
+
+def conv_transpose2d(x, *args, **kwargs): 
+    i = 0
+    out = []
+    batch_size = 10000
+    while i < x.size(0): 
+        out.append(F.conv_transpose2d(x[i:min(i+batch_size, x.size(0))], *args, **kwargs))
+        i += batch_size
+    return torch.cat(out, 0)
+
 # Convert flattened input to convolutional input
 def convert2to4(x, C, transpose=False): 
     if x.dim() == 1: 
@@ -62,7 +80,7 @@ class AffineConv2d(Affine):
     def forward(self, x): 
         if x.dim() == 2: 
             x = convert2to4(x, self.l)
-        out = F.conv2d(x.contiguous(), self.l.weight, 
+        out = conv2d(x.contiguous(), self.l.weight, 
                        stride=self.l.stride,
                        padding=self.l.padding)
         out = convert4to2(out)
@@ -98,7 +116,7 @@ class AffineTransposeConv2d(nn.Module):
     def forward(self, x): 
         if x.dim() == 2: 
             x = convert2to4(x, self.l, transpose=True)
-        out = F.conv_transpose2d(x.contiguous(), self.l.weight, 
+        out = conv_transpose2d(x.contiguous(), self.l.weight, 
                                  stride=self.l.stride,
                                  padding=self.l.padding)
         return convert4to2(out)
