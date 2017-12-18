@@ -37,6 +37,8 @@ def train_robust(loader, model, opt, epsilon, epoch, log):
         print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err, file=log)
         print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err)
         log.flush()
+
+        del X, y, robust_ce
         
 
 
@@ -53,6 +55,7 @@ def evaluate_robust(loader, model, epsilon, epoch, log):
         print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err, file=log)
         print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err)
         log.flush()
+        del X, y, robust_ce
 
 
 class Flatten(nn.Module):
