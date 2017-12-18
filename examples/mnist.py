@@ -50,8 +50,8 @@ def evaluate_robust(loader, model, epsilon, epoch, log):
         ce = nn.CrossEntropyLoss()(out, Variable(y))
         err = (out.data.max(1)[1] != y).float().sum()  / X.size(0)
 
-        print(epoch, i, robust_ce.data[0], robust_err[0], ce.data[0], err, file=log)
-        print(epoch, i, robust_ce.data[0], robust_err[0], ce.data[0], err)
+        print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err, file=log)
+        print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err)
         log.flush()
 
 
