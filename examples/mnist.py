@@ -8,7 +8,7 @@ import setGPU
 import numpy as np
 import cvxpy as cp
 
-from convex_adversarial import DualNetBounds, robust_loss_batch
+from convex_adversarial import robust_loss_batch
 
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
@@ -16,16 +16,19 @@ import torchvision.datasets as datasets
 import setproctitle
 import argparse
 
-def train_robust(loader, model, opt, epsilon, epoch, log):
+def train_robust(loader, model, opt, epsilon, epoch, log, 
+                 alpha_grad, scatter_grad, l1_proj):
     model.train()
     if epoch == 0:
         blank_state = opt.state_dict()
 
     for i, (X,y) in enumerate(loader):
         X,y = X.cuda(), y.cuda()
-
         robust_ce, robust_err = robust_loss_batch(model, epsilon, 
-                                             Variable(X), Variable(y))
+                                             Variable(X), Variable(y), 
+                                             alpha_grad=alpha_grad, 
+                                             scatter_grad=scatter_grad,
+                                             l1_proj=l1_proj)
         out = model(Variable(X))
         ce = nn.CrossEntropyLoss()(out, Variable(y))
         err = (out.data.max(1)[1] != y).float().sum()  / X.size(0)
@@ -47,7 +50,11 @@ def evaluate_robust(loader, model, epsilon, epoch, log):
     for i, (X,y) in enumerate(loader):
         X,y = X.cuda(), y.cuda()
         robust_ce, robust_err = robust_loss_batch(model, epsilon, 
-                                            Variable(X), Variable(y))
+                                            Variable(X), 
+                                            Variable(y), 
+                                             alpha_grad=False, 
+                                             scatter_grad=False,
+                                             l1_proj=None)
         out = model(Variable(X))
         ce = nn.CrossEntropyLoss()(out, Variable(y))
         err = (out.data.max(1)[1] != y).float().sum()  / X.size(0)
@@ -70,7 +77,9 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--epsilon", type=float, default=0.1)
     parser.add_argument('--prefix')
-    parser.add_argument('--alpha', default='default')
+    parser.add_argument('--alpha_grad', action='store_true')
+    parser.add_argument('--scatter_grad', action='store_true')
+    parser.add_argument('--l1_proj', type=int, default=None)
     args = parser.parse_args()
     args.prefix = args.prefix or 'mnist_conv_{:.4f}_{:.4f}_0'.format(args.epsilon, args.lr).replace(".","_")
     setproctitle.setproctitle(args.prefix)
@@ -97,18 +106,9 @@ if __name__ == "__main__":
         nn.Linear(100, 10)
     ).cuda()
 
-
-    # for X,y in test_loader:
-    #     X = X.cuda()
-    #     y = y.cuda()
-    #     break
-    # epsilon = 0.1
-    # from convex_adversarial import robust_loss
-    # ce_loss, ce_err = robust_loss(model, epsilon, Variable(X), Variable(y))
-    # ce_loss.backward()
-
     opt = optim.Adam(model.parameters(), lr=args.lr)
     for t in range(args.epochs):
-        train_robust(train_loader, model, opt, args.epsilon, t, train_log)
+        train_robust(train_loader, model, opt, args.epsilon, t, train_log, 
+            args.alpha_grad, args.scatter_grad, l1_proj=args.l1_proj)
         evaluate_robust(test_loader, model, args.epsilon, t, test_log)
         torch.save(model.state_dict(), args.prefix + "_model.pth")
