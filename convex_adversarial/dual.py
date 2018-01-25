@@ -4,7 +4,7 @@ import torch.optim as optim
 from torch.autograd import Variable
 
 import numpy as np
-import cvxpy as cp
+# import cvxpy as cp
 
 from . import affine as Aff
 
