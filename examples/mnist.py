@@ -1,3 +1,6 @@
+import waitGPU
+waitGPU.wait(utilization=80, available_memory=11000)
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -16,54 +19,7 @@ import torchvision.datasets as datasets
 import setproctitle
 import argparse
 
-def train_robust(loader, model, opt, epsilon, epoch, log, 
-                 alpha_grad, scatter_grad, l1_proj):
-    model.train()
-    if epoch == 0:
-        blank_state = opt.state_dict()
-
-    for i, (X,y) in enumerate(loader):
-        X,y = X.cuda(), y.cuda()
-        robust_ce, robust_err = robust_loss_batch(model, epsilon, 
-                                             Variable(X), Variable(y), 
-                                             alpha_grad=alpha_grad, 
-                                             scatter_grad=scatter_grad,
-                                             l1_proj=l1_proj)
-        out = model(Variable(X))
-        ce = nn.CrossEntropyLoss()(out, Variable(y))
-        err = (out.data.max(1)[1] != y).float().sum()  / X.size(0)
-
-        opt.zero_grad()
-        robust_ce.backward()
-        opt.step()
-
-        print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err, file=log)
-        print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err)
-        log.flush()
-
-        del X, y, robust_ce
-        
-
-
-def evaluate_robust(loader, model, epsilon, epoch, log):
-    model.eval()
-    for i, (X,y) in enumerate(loader):
-        X,y = X.cuda(), y.cuda()
-        robust_ce, robust_err = robust_loss_batch(model, epsilon, 
-                                            Variable(X), 
-                                            Variable(y), 
-                                             alpha_grad=False, 
-                                             scatter_grad=False,
-                                             l1_proj=None)
-        out = model(Variable(X))
-        ce = nn.CrossEntropyLoss()(out, Variable(y))
-        err = (out.data.max(1)[1] != y).float().sum()  / X.size(0)
-
-        print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err, file=log)
-        print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err)
-        log.flush()
-        del X, y, robust_ce
-
+from trainer import *
 
 class Flatten(nn.Module):
     def forward(self, x):
@@ -109,6 +65,7 @@ if __name__ == "__main__":
     opt = optim.Adam(model.parameters(), lr=args.lr)
     for t in range(args.epochs):
         train_robust(train_loader, model, opt, args.epsilon, t, train_log, 
+            10, 
             args.alpha_grad, args.scatter_grad, l1_proj=args.l1_proj)
-        evaluate_robust(test_loader, model, args.epsilon, t, test_log)
+        evaluate_robust(test_loader, model, args.epsilon, t, test_log, 10)
         torch.save(model.state_dict(), args.prefix + "_model.pth")
