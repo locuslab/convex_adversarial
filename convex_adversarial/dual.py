@@ -191,7 +191,7 @@ class DualNetBoundsBatch:
             self.I.append(((self.zu[-1] > 0) * (self.zl[-1] < 0)).detach())
             self.I_empty.append(self.I[-1].data.long().sum() == 0)
             d = self.I_pos[-1].type_as(X) + (self.zu[-1]/(self.zu[-1] - self.zl[-1]))*self.I[-1].type_as(X)
-            d[(self.zu[-1].data-self.zl[-1].data) == 0] = 0
+            d[((self.zu[-1].data-self.zl[-1].data) == 0)*self.I[-1].data] = 0
 
             # indices of [example idx, origin crossing feature idx]
             I_ind.append(Variable(self.I[-1].data.nonzero()))
@@ -238,12 +238,11 @@ class DualNetBoundsBatch:
             self.zu.append(nu_hat + sum(gamma) + epsilon*l1 - 
                            sum([(self.zl[j][self.I[j]] * nu[j].clamp(min=0)).mm(I_collapse[j]).t()
                                 for j in range(i+1) if not self.I_empty[j]]))
+        
+        self.s = [(u/(u-l)) for l,u in zip(self.zl, self.zu)]
 
-        self.s = [Variable(l.data.new(*l.size()).zero_()) for l in self.zl]
-        for s,l,u in zip(self.s, self.zl, self.zu): 
-            I_zero = ((u-l) == 0).detach()
-            s = (u/(u-l))
-            s[I_zero] = 0
+        for (s,l,u) in zip(self.s,self.zl, self.zu): 
+            s[((u-l) == 0).detach()] = 0
 
         
     def g(self, c):

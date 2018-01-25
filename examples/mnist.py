@@ -7,10 +7,6 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-import setGPU
-import numpy as np
-import cvxpy as cp
-
 from convex_adversarial import robust_loss_batch
 
 import torchvision.transforms as transforms
