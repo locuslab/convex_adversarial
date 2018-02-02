@@ -12,7 +12,9 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
         blank_state = opt.state_dict()
 
     for i, (X,y) in enumerate(loader):
-        X,y = X.cuda(), y.cuda()
+        X,y = X.cuda(), y.cuda().long()
+        if y.dim() == 2: 
+            y = y.squeeze(1)
 
         robust_ce, robust_err = robust_loss_batch(model, epsilon, 
                                              Variable(X), Variable(y), 
@@ -49,7 +51,9 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
 def evaluate_robust(loader, model, epsilon, epoch, log, verbose):
     model.eval()
     for i, (X,y) in enumerate(loader):
-        X,y = X.cuda(), y.cuda()
+        X,y = X.cuda(), y.cuda().long()
+        if y.dim() == 2: 
+            y = y.squeeze(1)
         robust_ce, robust_err = robust_loss_batch(model, epsilon, 
                                             Variable(X), Variable(y), 
                                              alpha_grad=True, 
