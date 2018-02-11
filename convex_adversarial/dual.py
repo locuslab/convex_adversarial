@@ -132,7 +132,8 @@ class DualNetBounds:
         return f
 
 class DualNetBoundsBatch: 
-    def __init__(self, net, X, epsilon, alpha_grad, scatter_grad):
+    def __init__(self, net, X, epsilon, alpha_grad, scatter_grad,
+                 l1_proj=None):
         self.layers = [l for l in net if isinstance(l, (nn.Linear, nn.Conv2d))]
         self.affine_transpose = [AffineTranspose(l) for l in self.layers]
         self.affine = [Affine(l) for l in self.layers]
@@ -150,11 +151,23 @@ class DualNetBoundsBatch:
         nu = []
         nu_hat = self.affine[0](X)
 
-        eye = Variable(torch.eye(self.affine[0].in_features)).type_as(X)
+        if l1_proj is None: 
+            eye = Variable(torch.eye(self.affine[0].in_features)).type_as(X)
+        else: 
+            if not isinstance(l1_proj, int): 
+                raise ValueError('l1_proj must be an integer')
+            # Use Cauchy random projections
+            eye = Variable(torch.zeros(l1_proj, 
+                                       self.affine[0].in_features
+                                      ).cauchy_()).type_as(X)
         nu_hat_ = self.affine[0](eye).unsqueeze(0)
 
-        l1 = (nu_hat_).abs().sum(1)
-        
+        if l1_proj is None: 
+            l1 = (nu_hat_).abs().sum(1)
+        else: 
+            # use an approximation
+            l1 = torch.median(nu_hat_.abs(), 1)[0]
+
         self.zl = [nu_hat + gamma[0] - epsilon*l1]
         self.zu = [nu_hat + gamma[0] + epsilon*l1]
 
@@ -216,8 +229,12 @@ class DualNetBoundsBatch:
             nu_hat = self.affine[i+1](d*nu_hat)
             nu_hat_ = self.affine[i+1]((d.unsqueeze(1)*nu_hat_).view(-1, d.size(1))).view(d.size(0), nu_hat_.size(1), -1)
             
-            l1 = (nu_hat_).abs().sum(1)
-            
+            if l1_proj is None: 
+                l1 = (nu_hat_).abs().sum(1)
+            else: 
+                # use an approximation
+                l1 = torch.median(nu_hat_.abs(), 1)[0]
+
             # compute bounds
             self.zl.append(nu_hat + sum(gamma) - epsilon*l1 + 
                            sum([(self.zl[j][self.I[j]] * (-nu[j]).clamp(min=0)).mm(I_collapse[j]).t()
@@ -283,12 +300,14 @@ def robust_loss(net, epsilon, X, y):
     return ce_loss/X.size(0), err/X.size(0)
 
 
-def robust_loss_batch(net, epsilon, X, y, alpha_grad, scatter_grad):
+def robust_loss_batch(net, epsilon, X, y, alpha_grad, scatter_grad, 
+                      l1_proj=None):
     num_classes = net[-1].out_features
     ce_loss = 0.0
     err = 0.0
     # batched
-    dual = DualNetBoundsBatch(net, X, epsilon, alpha_grad, scatter_grad)
+    dual = DualNetBoundsBatch(net, X, epsilon, alpha_grad, scatter_grad, 
+                              l1_proj=l1_proj)
     c = Variable(torch.eye(num_classes).type_as(X.data)[y.data].unsqueeze(1) - torch.eye(num_classes).type_as(X.data).unsqueeze(0))
     if X.is_cuda:
         c = c.cuda()

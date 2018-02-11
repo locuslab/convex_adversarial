@@ -19,7 +19,8 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
         robust_ce, robust_err = robust_loss_batch(model, epsilon, 
                                              Variable(X), Variable(y), 
                                              alpha_grad=alpha_grad, 
-                                             scatter_grad=scatter_grad)
+                                             scatter_grad=scatter_grad,
+                                             l1_proj=l1_proj)
 
         out = model(Variable(X))
         ce = nn.CrossEntropyLoss()(out, Variable(y))
@@ -56,7 +57,8 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose):
         robust_ce, robust_err = robust_loss_batch(model, epsilon, 
                                             Variable(X), Variable(y), 
                                              alpha_grad=True, 
-                                             scatter_grad=True)
+                                             scatter_grad=True,
+                                             l1_proj=None)
         out = model(Variable(X))
         ce = nn.CrossEntropyLoss()(out, Variable(y))
         err = (out.data.max(1)[1] != y).float().sum()  / X.size(0)
