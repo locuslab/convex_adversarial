@@ -17,11 +17,6 @@ import argparse
 import problems as pblm
 from trainer import *
 
-
-class Flatten(nn.Module):
-    def forward(self, x):
-        return x.view(x.size(0), -1)
-
 if __name__ == "__main__": 
     parser = argparse.ArgumentParser()
     parser.add_argument('--batch_size', type=int, default=50)

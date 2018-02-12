@@ -61,16 +61,6 @@ def svhn_model():
         nn.ReLU(),
         nn.Linear(100, 10)
     ).cuda()
-    # model = nn.Sequential(
-    #     nn.Conv2d(3, 12, 4, stride=2, padding=1),
-    #     nn.ReLU(),
-    #     nn.Conv2d(12, 16, 4, stride=2, padding=1),
-    #     nn.ReLU(),
-    #     Flatten(),
-    #     nn.Linear(16*8*8,100),
-    #     nn.ReLU(),
-    #     nn.Linear(100, 10)
-    # )
     return model
 
 def har_loaders(batch_size):     
