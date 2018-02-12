@@ -5,7 +5,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-from convex_adversarial import DualNetBoundsBatch, Affine, full_bias
+from convex_adversarial import DualNetBounds, Affine, full_bias
 
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
@@ -39,8 +39,8 @@ if __name__ == "__main__":
     if args.mnist: 
         train_loader, test_loader = pblm.mnist_loaders(args.batch_size)
         model = pblm.mnist_model().cuda()
-        model.load_state_dict(torch.load('icml/mnist_epochs_100_baseline_model.pth'))
-        # model.load_state_dict(torch.load('icml/mnist_epochs100_model.pth'))
+        # model.load_state_dict(torch.load('icml/mnist_epochs_100_baseline_model.pth'))
+        model.load_state_dict(torch.load('icml/mnist_epochs100_model.pth'))
     elif args.svhn: 
         train_loader, test_loader = pblm.svhn_loaders(args.batch_size)
         model = pblm.svhn_model().cuda()
@@ -61,10 +61,8 @@ if __name__ == "__main__":
     loader = train_loader if args.train else test_loader
 
     for j,(X,y) in enumerate(loader): 
-        # if j == 0: 
-        #     continue
         print('*** Batch {} ***'.format(j))
-        dual = DualNetBoundsBatch(model, Variable(X.cuda()), epsilon, True, True)
+        dual = DualNetBounds(model, Variable(X.cuda()), epsilon, True, True)
         C = torch.eye(num_classes).type_as(X)[y].unsqueeze(1) - torch.eye(num_classes).type_as(X).unsqueeze(0)
 
         upper_bound = -dual.g(Variable(C.cuda())).data
@@ -105,24 +103,5 @@ if __name__ == "__main__":
                 cons = cons_eq + cons_ball + cons_zero + cons_linear + cons_upper
                 fobj = cp.Problem(cp.Minimize(c*zhat[-1]), cons).solve(verbose=False)
 
-                # cons_eq = [zhat[i] == W[i]*z[i] + b[i] for i in range(k)]
-                # cons_ball = [z[0] >= x - epsilon, z[0] <= x + epsilon]
-                # cons_zero = [z[i][I_minus[i-1]] == 0 for i in range(1,k)]
-                # cons_linear = [z[i+1][I_plus[i]] == zhat[i][I_plus[i]] for i in range(k-1)]
-                # cons_zero0 = [z[i][I[i-1]] >= 0 for i in range(1,k)]
-                # cons_linear0 = [z[i+1][I[i]] >= zhat[i][I[i]] for i in range(k-1)]
-                # cons_upper = [cp.mul_elemwise(zu[i][I[i]] - zl[i][I[i]], z[i+1][I[i]])
-                #                -cp.mul_elemwise(zu[i][I[i]], zhat[i][I[i]]) <= 
-                #                -(zu[i][I[i]]*zl[i][I[i]]) for i in range(k-1)]
-
-                # cons = cons_eq + cons_ball + cons_zero + cons_linear + cons_upper + cons_zero0 + cons_linear0
-                # fobj = cp.Problem(cp.Minimize(c*zhat[-1]), cons).solve(verbose=False)
-                # print(cons_eq)
-                # print(fobj, list(map(cp2np, z)), list(map(cp2np, zhat)))
                 print(i0, j0, upper_bound[i0][j0], -fobj)
                 print(i0, j0, upper_bound[i0][j0], -fobj, file=log)
-            #     primal_values.append(-fobj)
-            # print(upper_bound[0])
-            # print(primal_values)
-        #     break
-        # break
