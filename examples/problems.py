@@ -40,6 +40,19 @@ def mnist_model():
     )
     return model
 
+def mnist_model_large(): 
+    model = nn.Sequential(
+        nn.Conv2d(1, 32, 4, stride=2, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(32, 64, 4, stride=2, padding=1),
+        nn.ReLU(),
+        Flatten(),
+        nn.Linear(64*7*7,100),
+        nn.ReLU(),
+        nn.Linear(100, 10)
+    )
+    return model
+
 def replace_10_with_0(y): 
     return y % 10
 

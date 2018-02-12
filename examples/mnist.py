@@ -1,5 +1,6 @@
 import waitGPU
-waitGPU.wait(utilization=20, available_memory=10000, interval=10, gpu_ids=[2,3])
+waitGPU.wait(utilization=20, available_memory=10000, interval=10, gpu_ids=
+    [0,2,3])
 
 import torch
 import torch.nn as nn
@@ -30,6 +31,7 @@ if __name__ == "__main__":
     parser.add_argument('--alpha_grad', action='store_true')
     parser.add_argument('--scatter_grad', action='store_true')
     parser.add_argument('--l1_proj', type=int, default=None)
+    parser.add_argument('--large', action='store_true')
     args = parser.parse_args()
     args.prefix = args.prefix or 'mnist_conv_{:.4f}_{:.4f}_0'.format(args.epsilon, args.lr).replace(".","_")
     setproctitle.setproctitle(args.prefix)
@@ -42,7 +44,10 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
-    model = pblm.mnist_model().cuda()
+    if args.large: 
+        model = pblm.mnist_model_large().cuda()
+    else: 
+        model = pblm.mnist_model().cuda()
 
     opt = optim.Adam(model.parameters(), lr=args.lr)
     for t in range(args.epochs):
