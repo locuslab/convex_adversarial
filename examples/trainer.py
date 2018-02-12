@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
-from convex_adversarial import robust_loss_batch
+from convex_adversarial import robust_loss
 
 import numpy as np
 
@@ -16,7 +16,7 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
         if y.dim() == 2: 
             y = y.squeeze(1)
 
-        robust_ce, robust_err = robust_loss_batch(model, epsilon, 
+        robust_ce, robust_err = robust_loss(model, epsilon, 
                                              Variable(X), Variable(y), 
                                              alpha_grad=alpha_grad, 
                                              scatter_grad=scatter_grad,
@@ -28,14 +28,6 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
 
         opt.zero_grad()
         robust_ce.backward()
-
-
-        if np.isnan(list(model.parameters())[0].grad.data.cpu().numpy()).any():
-            torch.save(X, 'X_NaN_model.pth')
-            torch.save(y, 'y_NaN_model.pth')
-            torch.save(model.state_dict(), "params_NaN_model.pth")
-            assert False
-
 
         opt.step()
 
@@ -54,7 +46,7 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose):
         X,y = X.cuda(), y.cuda().long()
         if y.dim() == 2: 
             y = y.squeeze(1)
-        robust_ce, robust_err = robust_loss_batch(model, epsilon, 
+        robust_ce, robust_err = robust_loss(model, epsilon, 
                                             Variable(X), Variable(y), 
                                              alpha_grad=True, 
                                              scatter_grad=True,

@@ -8,20 +8,14 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 import torch.utils.data as td
 
-from convex_adversarial import robust_loss_batch
-
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 
 import setproctitle
 import argparse
 
+import problems as pblm
 from trainer import *
-
-
-class Flatten(nn.Module):
-    def forward(self, x):
-        return x.view(x.size(0), -1)
 
 if __name__ == "__main__": 
     parser = argparse.ArgumentParser()
@@ -45,37 +39,12 @@ if __name__ == "__main__":
     train_log = open(args.prefix + "_train.log", "w")
     test_log = open(args.prefix + "_test.log", "w")
 
-    X_te = torch.from_numpy(np.loadtxt('../datasets/UCI HAR Dataset/test/X_test.txt')).float()
-    X_tr = torch.from_numpy(np.loadtxt('../datasets/UCI HAR Dataset/train/X_train.txt')).float()
-    y_te = torch.from_numpy(np.loadtxt('../datasets/UCI HAR Dataset/test/y_test.txt')-1).long()
-    y_tr = torch.from_numpy(np.loadtxt('../datasets/UCI HAR Dataset/train/y_train.txt')-1).long()
-
-    har_train = td.TensorDataset(X_tr, y_tr)
-    har_test = td.TensorDataset(X_te, y_te)
-
-    train_loader = torch.utils.data.DataLoader(har_train, batch_size=args.batch_size, shuffle=True, pin_memory=False)
-    test_loader = torch.utils.data.DataLoader(har_test, batch_size=args.batch_size, shuffle=False, pin_memory=False)
+    train_loader, test_loader = pblm.har_loaders(args.batch_size)
 
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
-    model = nn.Sequential(
-        # nn.Conv2d(1, 16, 4, stride=2, padding=1),
-        # nn.ReLU(),
-        # nn.Conv2d(16, 32, 4, stride=2, padding=1),
-        # nn.ReLU(),
-        # Flatten(),
-        # nn.Linear(32*7*7,100),
-        nn.Linear(561, 500),
-        nn.ReLU(),
-        # nn.Linear(500, 500),
-        # nn.ReLU(),
-        nn.Linear(500, 250),
-        nn.ReLU(),
-        nn.Linear(250, 100),
-        nn.ReLU(),
-        nn.Linear(100, 6)
-    ).cuda()
+    model = pblm.har_500_model().cuda()
 
     opt = optim.Adam(model.parameters(), lr=args.lr)
     for t in range(args.epochs):
