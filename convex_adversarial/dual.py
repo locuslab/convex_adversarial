@@ -178,9 +178,6 @@ class DualNetBounds:
 
 def robust_loss(net, epsilon, X, y, alpha_grad, scatter_grad):
     num_classes = net[-1].out_features
-    ce_loss = 0.0
-    err = 0.0
-    # batched
     dual = DualNetBounds(net, X, epsilon, alpha_grad, scatter_grad)
     c = Variable(torch.eye(num_classes).type_as(X.data)[y.data].unsqueeze(1) - torch.eye(num_classes).type_as(X.data).unsqueeze(0))
     if X.is_cuda:
