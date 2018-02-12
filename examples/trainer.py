@@ -47,7 +47,8 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose):
         if y.dim() == 2: 
             y = y.squeeze(1)
         robust_ce, robust_err = robust_loss(model, epsilon, 
-                                            Variable(X), Variable(y), 
+                                            Variable(X, volatile=True), 
+                                            Variable(y, volatile=True),
                                              alpha_grad=True, 
                                              scatter_grad=True,
                                              l1_proj=None)

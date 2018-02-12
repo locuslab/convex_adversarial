@@ -201,11 +201,10 @@ class DualNetBounds:
         for i in range(self.k-2,-1,-1):
             nu[i] = batch(self.affine_transpose[i](unbatch(nu[i+1])),n)
             if i > 0:
+                # avoid in place operation
                 out = nu[i].clone()
                 out[self.I_neg[i-1].unsqueeze(1)] = 0
-                # nu[i][self.I_neg[i-1].unsqueeze(1)] = 0
                 if not self.I_empty[i-1]:
-                    # avoid in place operation
                     if self.alpha_grad: 
                         out[self.I[i-1].unsqueeze(1)] = (self.s[i-1].unsqueeze(1).expand(*nu[i].size())[self.I[i-1].unsqueeze(1)] * 
                                                                nu[i][self.I[i-1].unsqueeze(1)])
