@@ -36,104 +36,10 @@ def full_bias(l, n=None):
     else:
         raise ValueError("Full bias can't be formed for given layer.")
 
-class DualNetBounds:    
-    def __init__(self, net, x, epsilon):
-        x = x.unsqueeze(0)
-        # create network without bias terms
-        self.layers = [l for l in net if isinstance(l, (nn.Linear, nn.Conv2d))]
-        self.affine_transpose = [AffineTranspose(l) for l in self.layers]
-        self.affine = [Affine(l) for l in self.layers]
-        self.k = len(self.layers)+1
-
-        # initialize affine layers with a forward pass
-        _ = x.view(1,-1)
-        for a in self.affine: 
-            _ = a(_)
-            
-        self.biases = [full_bias(l, self.affine[i].out_features) 
-                        for i,l in enumerate(self.layers)]
-        
-        gamma = [self.biases[0]]
-        nu = []
-        nu_hat = self.affine[0](x)
-        nu_hat_ = self.affine[0](Variable(torch.eye(self.affine[0].in_features)).type_as(x))
-        
-        self.zl = [nu_hat.view(-1) + gamma[0].view(-1) - epsilon*(nu_hat_).abs().sum(0)]
-        self.zu = [nu_hat.view(-1) + gamma[0].view(-1) + epsilon*(nu_hat_).abs().sum(0)]
-
-        self.I = []
-        self.I_empty = []
-        self.I_neg = []
-        self.I_pos = []
-        self.x = x
-        self.epsilon = epsilon
-        
-
-        for i in range(0,self.k-2):
-            # compute sets and activation
-            self.I_neg.append((self.zu[-1] <= 0).detach())
-            self.I_pos.append((self.zl[-1] > 0).detach())
-            self.I.append(((self.zu[-1] > 0) * (self.zl[-1] < 0)).detach())
-            self.I_empty.append(self.I[-1].data.long().sum() == 0)
-            d = self.I_pos[-1].type_as(x) + (self.zu[-1]/(self.zu[-1] - self.zl[-1]))*self.I[-1].type_as(x)
-            
-            # initialize new terms
-            if not self.I_empty[-1]:
-                out_features = self.affine[i+1].out_features
-                subset_eye = Variable(x.data.new(self.I[-1].data.sum(), d.numel()).zero_())
-                subset_eye.scatter_(1, Variable(self.I[-1].data.nonzero()), d[self.I[-1]][:,None])
-                nu.append(self.affine[i+1](subset_eye.detach()).t())
-            else:
-                nu.append(Variable(torch.zeros(self.affine[i+1].out_features,1)).type_as(x))         
-            gamma.append(self.biases[i+1])
-            # propagate terms
-            gamma[0] = self.affine[i+1](d * gamma[0])
-            for j in range(1,i+1):
-                gamma[j] = self.affine[i+1](d * gamma[j])
-                nu[j-1] = self.affine[i+1]((d[:,None] * nu[j-1]).t()).t()
-            nu_hat = self.affine[i+1](d*nu_hat)
-            nu_hat_ = self.affine[i+1](d*nu_hat_)
-            
-            # compute bounds
-            self.zl.append(nu_hat.view(-1) + sum(gamma).view(-1) - epsilon*nu_hat_.abs().sum(0) + 
-                           sum([(self.zl[j][self.I[j]] * (-nu[j]).clamp(min=0)).sum(1) 
-                                for j in range(i+1) if not self.I_empty[j]]))
-            self.zu.append(nu_hat.view(-1) + sum(gamma).view(-1) + epsilon*nu_hat_.abs().sum(0) - 
-                           sum([(self.zl[j][self.I[j]] * nu[j].clamp(min=0)).sum(1) 
-                                for j in range(i+1) if not self.I_empty[j]]))
-
-        self.s = [(u/(u-l)) for l,u in zip(self.zl, self.zu)]
-        
-            
-    def g(self, c):
-        # print("serialized start")
-        nu = [[]]*self.k
-        nu[-1] = -c
-        for i in range(self.k-2,-1,-1):
-            nu[i] = self.affine_transpose[i](nu[i+1])
-            if i > 0:
-                nu[i][self.I_neg[i-1].expand_as(nu[i])] = 0
-                if not self.I_empty[i-1]:
-                    #print(self.s[i-1][self.I[i-1]].repeat(nu[i].size(0)))
-                    # print((self.s[i-1][self.I[i-1]].repeat(nu[i].size(0)) * 
-                    #                                        nu[i][self.I[i-1].expand_as(nu[i])]))
-                    #assert False
-                    nu[i][self.I[i-1].expand_as(nu[i])] = (self.s[i-1][self.I[i-1]].repeat(nu[i].size(0)) * 
-                                                           nu[i][self.I[i-1].expand_as(nu[i])])
-        
-        f = (-sum(nu[i+1].mm(self.biases[i].view(-1,1))[:,0] for i in range(self.k-1)) 
-             - nu[0].mm(self.x.view(-1,1))[:,0]
-             - self.epsilon*nu[0].abs().sum(1)
-             + sum((nu[i].clamp(min=0)*self.zl[i-1][None,:])[self.I[i-1].expand_as(nu[i])].view(nu[i].size(0),-1).sum(1)
-                   for i in range(1,self.k-1) if not self.I_empty[i-1]))
-        # for n in nu:
-        #     print(n)
-        # print(f.data)
-        return f
-
 class DualNetBoundsBatch: 
     def __init__(self, net, X, epsilon, alpha_grad, scatter_grad,
                  l1_proj=None):
+        batch_size = X.size(0)
         self.layers = [l for l in net if isinstance(l, (nn.Linear, nn.Conv2d))]
         self.affine_transpose = [AffineTranspose(l) for l in self.layers]
         self.affine = [Affine(l) for l in self.layers]
@@ -149,6 +55,7 @@ class DualNetBoundsBatch:
         
         gamma = [self.biases[0]]
         nu = []
+        nu_one = []
         nu_hat = self.affine[0](X)
 
         if l1_proj is None: 
@@ -190,7 +97,6 @@ class DualNetBoundsBatch:
             self.I_pos.append((self.zl[-1] > 0).detach())
             self.I.append(((self.zu[-1] > 0) * (self.zl[-1] < 0)).detach())
             self.I_empty.append(self.I[-1].data.long().sum() == 0)
-            # d = self.I_pos[-1].type_as(X) + (self.zu[-1]/(self.zu[-1] - self.zl[-1]))*self.I[-1].type_as(X)
             
             I_nonzero = ((self.zu[-1]!=self.zl[-1])*self.I[-1]).detach()
             d = self.I_pos[-1].type_as(X).clone()
@@ -204,27 +110,49 @@ class DualNetBoundsBatch:
             if not self.I_empty[-1]:
                 out_features = self.affine[i+1].out_features
 
-                subset_eye = Variable(X.data.new(self.I[-1].data.sum(), d.size(1)).zero_())
-                subset_eye.scatter_(1, I_ind[-1][:,1,None], d[self.I[-1]][:,None])
+                if l1_proj is None: 
+                    subset_eye = Variable(X.data.new(self.I[-1].data.sum(), d.size(1)).zero_())
+                    subset_eye.scatter_(1, I_ind[-1][:,1,None], d[self.I[-1]][:,None])
 
-                if not scatter_grad: 
-                    subset_eye = subset_eye.detach()
-                nu.append(self.affine[i+1](subset_eye).t())
+                    if not scatter_grad: 
+                        subset_eye = subset_eye.detach()
+                    nu.append(self.affine[i+1](subset_eye))
 
-                # create a matrix that collapses the minibatch of origin-crossing indices 
-                # back to the sum of each minibatch
-                I_collapse.append(Variable(X.data.new(I_ind[-1].size(0), X.size(0)).zero_()))
-                I_collapse[-1].scatter_(1, I_ind[-1][:,0][:,None], 1)
+                    # create a matrix that collapses the minibatch of origin-crossing indices 
+                    # back to the sum of each minibatch
+                    I_collapse.append(Variable(X.data.new(I_ind[-1].size(0), batch_size).zero_()))
+                    I_collapse[-1].scatter_(1, I_ind[-1][:,0][:,None], 1)
+                else: 
+                    subset_eye = Variable(torch.zeros(1, l1_proj, 
+                                               self.affine[i+1].in_features
+                                              ).cauchy_()).type_as(X)
+                    ones = Variable(torch.ones(1, self.affine[i+1].in_features)).type_as(X)
+
+                    subset_eye[:,:,(~self.I[-1].data).nonzero().squeeze(1)] = 0
+                    subset_eye = self.zl[-1].unsqueeze(1)*subset_eye
+                    ones[:, (~self.I[-1].data).nonzero().squeeze(1)] = 0
+                    ones = self.zl[-1]*ones
+
+                    nu.append(self.affine[i+1](subset_eye.view(-1,subset_eye.size(2))))
+                    nu_one.append(self.affine[i+1](ones))
             else:
-                nu.append(Variable(torch.zeros(1, self.affine[i+1].out_features)).type_as(X))         
+                # I think this could be None
+                nu.append(None)         
                 I_collapse.append(None)
+
             gamma.append(self.biases[i+1])
             # propagate terms
             gamma[0] = self.affine[i+1](d * gamma[0])
             for j in range(1,i+1):
                 gamma[j] = self.affine[i+1](d * gamma[j])
                 if not self.I_empty[j-1]: 
-                    nu[j-1] = self.affine[i+1]((d[I_ind[j-1][:,0]].t() * nu[j-1]).t()).t()
+                    if l1_proj is None: 
+                        nu[j-1] = self.affine[i+1]((d[I_ind[j-1][:,0]] * nu[j-1]))
+                    else: 
+                        print("*", nu[j-1].size(), d.size())
+                        nu[j-1] = self.affine[i+1]((d * nu[j-1]).t()).t()
+                    if l1_proj is not None: 
+                        nu_one[j-1] = self.affine[i+1]((d[I_ind[j-1][:,0]].t() * nu_one[j-1]).t()).t()
 
             nu_hat = self.affine[i+1](d*nu_hat)
             nu_hat_ = self.affine[i+1]((d.unsqueeze(1)*nu_hat_).view(-1, d.size(1))).view(d.size(0), nu_hat_.size(1), -1)
@@ -235,13 +163,20 @@ class DualNetBoundsBatch:
                 # use an approximation
                 l1 = torch.median(nu_hat_.abs(), 1)[0]
 
+            if l1_proj is None: 
+                print(I_collapse.size(-1), nu[-1].size())
+                nu_zl = sum([(self.zl[j][self.I[j]] * (-nu[j].t()).clamp(min=0)).mm(I_collapse[j]).t()
+                                for j in range(i+1) if not self.I_empty[j]])
+                nu_zu = sum([(self.zl[j][self.I[j]] * nu[j].t().clamp(min=0)).mm(I_collapse[j]).t()
+                                for j in range(i+1) if not self.I_empty[j]])
+            else: 
+                nu_zl = sum([(-torch.median(nu[j].view(batch_size,-1,nu[j].size(1)).abs(),1)[0] + nu_one[j])/2
+                                for j in range(i+1) if not self.I_empty[j]])
+                nu_zu = sum([(-torch.median(nu[j].view(batch_size,-1,nu[j].size(1)).abs(),1)[0] - nu_one[j])/2
+                                for j in range(i+1) if not self.I_empty[j]])
             # compute bounds
-            self.zl.append(nu_hat + sum(gamma) - epsilon*l1 + 
-                           sum([(self.zl[j][self.I[j]] * (-nu[j]).clamp(min=0)).mm(I_collapse[j]).t()
-                                for j in range(i+1) if not self.I_empty[j]]))
-            self.zu.append(nu_hat + sum(gamma) + epsilon*l1 - 
-                           sum([(self.zl[j][self.I[j]] * nu[j].clamp(min=0)).mm(I_collapse[j]).t()
-                                for j in range(i+1) if not self.I_empty[j]]))
+            self.zl.append(nu_hat + sum(gamma) - epsilon*l1 + nu_zl)
+            self.zu.append(nu_hat + sum(gamma) + epsilon*l1 - nu_zu)
         
         self.s = [torch.zeros_like(u) for l,u in zip(self.zl, self.zu)]
 
