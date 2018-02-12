@@ -154,10 +154,10 @@ class DualNetBounds:
         for i in range(self.k-2,-1,-1):
             nu[i] = batch(self.affine_transpose[i](unbatch(nu[i+1])),n)
             if i > 0:
-                nu[i][self.I_neg[i-1].unsqueeze(1)] = 0
+                # avoid in place operation
+                out = nu[i].clone()
+                out[self.I_neg[i-1].unsqueeze(1)] = 0
                 if not self.I_empty[i-1]:
-                    out = nu[i].clone()
-                    # avoid in place operation
                     if self.alpha_grad: 
                         out[self.I[i-1].unsqueeze(1)] = (self.s[i-1].unsqueeze(1).expand(*nu[i].size())[self.I[i-1].unsqueeze(1)] * 
                                                                nu[i][self.I[i-1].unsqueeze(1)])
@@ -166,7 +166,7 @@ class DualNetBounds:
                                                                                    torch.clamp(nu[i], min=0)[self.I[i-1].unsqueeze(1)])
                                                          + (self.s[i-1].detach().unsqueeze(1).expand(*nu[i].size())[self.I[i-1].unsqueeze(1)] * 
                                                                                    torch.clamp(nu[i], max=0)[self.I[i-1].unsqueeze(1)]))
-                    nu[i] = out
+                nu[i] = out
 
         f = (-sum(nu[i+1].matmul(self.biases[i].view(-1)) for i in range(self.k-1))
              -nu[0].matmul(self.X.view(self.X.size(0),-1).unsqueeze(2)).squeeze(2)
