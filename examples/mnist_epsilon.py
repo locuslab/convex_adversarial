@@ -7,7 +7,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-from convex_adversarial import DualNetBoundsBatch
+from convex_adversarial import DualNetBounds
 
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
@@ -19,11 +19,11 @@ import problems as pblm
 
 if __name__ == "__main__": 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--batch_size', type=int, default=50)
-    parser.add_argument('--niters', type=int, default=100)
+    parser.add_argument('--batch_size', type=int, default=20)
+    parser.add_argument('--niters', type=int, default=20)
     parser.add_argument('--epsilon', type=float, default=0.1)
     parser.add_argument('--alpha', type=float, default=1)
-    parser.add_argument('--threshold', type=float, default=1e-5)
+    parser.add_argument('--threshold', type=float, default=1e-4)
     parser.add_argument('--prefix', default='temp')
     parser.add_argument('--train', action='store_true')
 
@@ -38,7 +38,6 @@ if __name__ == "__main__":
         train_loader, test_loader = pblm.mnist_loaders(args.batch_size)
         model = pblm.mnist_model().cuda()
         model.load_state_dict(torch.load('icml/mnist_epochs_100_baseline_model.pth'))
-        # model.load_state_dict(torch.load('icml/mnist_epochs100_model.pth'))
     elif args.svhn: 
         train_loader, test_loader = pblm.svhn_loaders(args.batch_size)
         model = pblm.svhn_model().cuda()
@@ -77,17 +76,11 @@ if __name__ == "__main__":
         alpha = args.alpha
 
         def f(eps): 
-            dual = DualNetBoundsBatch(model, X, eps, True, True)
+            dual = DualNetBounds(model, X, eps.unsqueeze(1), True, True)
             f = -dual.g(c)
             return (f.max(1)[0])
 
         for i in range(args.niters): 
-            # dual = DualNetBoundsBatch(model, X, epsilon, True, True)
-            
-            # f = -dual.g(c)
-            # f_max = (f.max(1)[0])
-
-            # f_val = f_max.data.abs().sum()
             f_max = f(epsilon)
             print(i, f_max.data.abs().sum())
             # if done, stop
@@ -109,10 +102,6 @@ if __name__ == "__main__":
                     break
 
             epsilon = epsilon0
-            # epsilon = Variable((epsilon - alpha*(f_max/(epsilon.grad))).data,
-            #    requires_grad=True)
-            # if i % 10 == 9: 
-            #     alpha *= 0.9
             del f_max
 
         if i == args.niters - 1: 
@@ -121,8 +110,6 @@ if __name__ == "__main__":
         incorrect.append(epsilon[y!=out])
 
         del X, y
-        # if j > 1: 
-        #     break
     print(l)
     torch.save(torch.cat(correct, 0), '{}_correct_epsilons.pth'.format(args.prefix))
     torch.save(torch.cat(incorrect, 0), '{}_incorrect_epsilons.pth'.format(args.prefix))
