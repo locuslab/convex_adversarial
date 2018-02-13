@@ -1,7 +1,7 @@
 import waitGPU
-waitGPU.wait(utilization=20, available_memory=10000, interval=10, gpu_ids=
-    [0,2,3])
+waitGPU.wait(utilization=20, available_memory=10000, interval=10, gpu_ids=[1])
 
+# import setGPU
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -39,13 +39,18 @@ if __name__ == "__main__":
     train_log = open(args.prefix + "_train.log", "w")
     test_log = open(args.prefix + "_test.log", "w")
 
-    train_loader, test_loader = pblm.mnist_loaders(args.batch_size)
+    train_loader, _ = pblm.mnist_loaders(args.batch_size)
+    _, test_loader = pblm.mnist_loaders(2)
 
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
     if args.large: 
-        model = pblm.mnist_model_large().cuda()
+        # model = pblm.mnist_model_large().cuda()
+        model = pblm.mnist_model_vgg().cuda()
+        # for X,y in train_loader: 
+        #     print(model(Variable(X.cuda())).size())
+        #     assert False
     else: 
         model = pblm.mnist_model().cuda()
 

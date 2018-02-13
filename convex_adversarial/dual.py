@@ -43,7 +43,7 @@ def unbatch(A):
 
 class DualNetBounds: 
     def __init__(self, net, X, epsilon, alpha_grad, scatter_grad, l1_proj=None):
-        pos_proj = None
+        pos_proj = l1_proj
         n = X.size(0)
 
         self.layers = [l for l in net if isinstance(l, (nn.Linear, nn.Conv2d))]
@@ -203,6 +203,7 @@ class DualNetBounds:
             if i > 0:
                 # avoid in place operation
                 out = nu[i].clone()
+                # print(out.size(), self.I_neg[i-1].size())
                 out[self.I_neg[i-1].unsqueeze(1)] = 0
                 if not self.I_empty[i-1]:
                     if self.alpha_grad: 

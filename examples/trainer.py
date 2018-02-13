@@ -38,6 +38,7 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
         log.flush()
 
         del X, y, robust_ce, out, ce
+        torch.cuda.empty_cache()
 
 
 def evaluate_robust(loader, model, epsilon, epoch, log, verbose):
@@ -50,8 +51,7 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose):
                                             Variable(X, volatile=True), 
                                             Variable(y, volatile=True),
                                              alpha_grad=True, 
-                                             scatter_grad=True,
-                                             l1_proj=None)
+                                             scatter_grad=True)
         out = model(Variable(X))
         ce = nn.CrossEntropyLoss()(out, Variable(y))
         err = (out.data.max(1)[1] != y).float().sum()  / X.size(0)
@@ -62,6 +62,7 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose):
         log.flush()
 
         del X, y, robust_ce, out, ce
+        torch.cuda.empty_cache()
 
 def train_baseline(loader, model, opt, epoch, log, verbose):
     model.train()
