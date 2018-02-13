@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
-from convex_adversarial import robust_loss_batch
+from convex_adversarial import robust_loss
 
 class Flatten(nn.Module):
     def forward(self, x):
