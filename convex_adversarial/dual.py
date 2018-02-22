@@ -7,6 +7,7 @@ import numpy as np
 # import cvxpy as cp
 
 from . import affine as Aff
+from . import l1 as L1_engine
 
 def AffineTranspose(l): 
     if isinstance(l, nn.Linear): 
@@ -42,7 +43,11 @@ def unbatch(A):
     return A.view(-1, *A.size()[2:])
 
 class DualNetBounds: 
-    def __init__(self, net, X, epsilon, alpha_grad, scatter_grad, l1_proj=None):
+    def __init__(self, net, X, epsilon, alpha_grad, scatter_grad, 
+                 l1_proj=None,
+                 test=False):
+        L = L1_engine.L1(X)
+        # pos_proj = None
         pos_proj = l1_proj
         n = X.size(0)
 
@@ -50,6 +55,7 @@ class DualNetBounds:
         self.affine_transpose = [AffineTranspose(l) for l in self.layers]
         self.affine = [Affine(l) for l in self.layers]
         self.k = len(self.layers)+1
+        nu = []
 
         # initialize affine layers with a forward pass
         _ = X[0].view(1,-1)
@@ -60,13 +66,13 @@ class DualNetBounds:
                         for i,l in enumerate(self.layers)]
         
         gamma = [self.biases[0]]
-        nu = []
 
         nu_one = []
         nu_hat_x = self.affine[0](X)
 
         if l1_proj is None: 
-            eye = Variable(torch.eye(self.affine[0].in_features)).type_as(X)
+            eye = L.input(self.affine[0].in_features)
+            #Variable(torch.eye(self.affine[0].in_features)).type_as(X)
         else: 
             if not isinstance(l1_proj, int): 
                 raise ValueError('l1_proj must be an integer')
@@ -77,10 +83,14 @@ class DualNetBounds:
         nu_hat_1 = self.affine[0](eye).unsqueeze(0)
 
         if l1_proj is None: 
-            l1 = (nu_hat_1).abs().sum(1)
+            l1 = L.l1_norm(nu_hat_1)
+            #l1 = (nu_hat_1).abs().sum(1)
         else: 
             # use an approximation
-            l1 = torch.median(nu_hat_1.abs(), 1)[0]
+            if test: 
+                l1 = torch.exp((torch.log(nu_hat_1.abs())/l1_proj).sum(1))
+            else:
+                l1 = torch.median(nu_hat_1.abs(), 1)[0]
 
         self.zl = [nu_hat_x + gamma[0] - epsilon*l1]
         self.zu = [nu_hat_x + gamma[0] + epsilon*l1]
@@ -113,25 +123,19 @@ class DualNetBounds:
                 d[I_nonzero] += self.zu[-1][I_nonzero]/(self.zu[-1][I_nonzero] - self.zl[-1][I_nonzero])
 
             # indices of [example idx, origin crossing feature idx]
-            I_ind.append(Variable(self.I[-1].data.nonzero()))
+            # I_ind.append(Variable(self.I[-1].data.nonzero()))
             
             # initialize new terms
+            L.apply(self.affine[i+1], d)
             if not self.I_empty[-1]:
-                out_features = self.affine[i+1].out_features
 
-                if pos_proj is None: 
-                    subset_eye = Variable(X.data.new(self.I[-1].data.sum(), d.size(1)).zero_())
-                    subset_eye.scatter_(1, I_ind[-1][:,1,None], d[self.I[-1]][:,None])
+                subset_eye = L.add_layer(self.affine[i+1], 
+                                         self.I, 
+                                         d, 
+                                         scatter_grad)
 
-                    if not scatter_grad: 
-                        subset_eye = subset_eye.detach()
-                    nu.append(self.affine[i+1](subset_eye))
-
-                    # create a matrix that collapses the minibatch of origin-crossing indices 
-                    # back to the sum of each minibatch
-                    I_collapse.append(Variable(X.data.new(I_ind[-1].size(0), n).zero_()))
-                    I_collapse[-1].scatter_(1, I_ind[-1][:,0][:,None], 1)
-                else: 
+                if pos_proj is not None: 
+                    out_features = self.affine[i+1].out_features
                     subset_eye = Variable(torch.zeros(1, pos_proj, 
                                                self.affine[i+1].in_features
                                               ).cauchy_()).type_as(X)
@@ -146,8 +150,11 @@ class DualNetBounds:
                     nu.append(self.affine[i+1](subset_eye.view(-1,subset_eye.size(2))))
                     nu_one.append(self.affine[i+1](ones))
             else:
-                nu.append(None)         
-                I_collapse.append(None)
+                L.skip()
+                # nu.append(None)         
+                # I_collapse.append(None)
+                if pos_proj is not None: 
+                    nu_one.append(None)
 
             gamma.append(self.biases[i+1])
             # propagate terms
@@ -155,27 +162,32 @@ class DualNetBounds:
             for j in range(1,i+1):
                 gamma[j] = self.affine[i+1](d * gamma[j])
                 if not self.I_empty[j-1]: 
-                    if pos_proj is None: 
-                        nu[j-1] = self.affine[i+1]((d[I_ind[j-1][:,0]] * nu[j-1]))
-                    else: 
-                        nu[j-1] = self.affine[i+1](unbatch(d.unsqueeze(1) * batch(nu[j-1],n)))
+                    # if pos_proj is None: 
+                    #     nu[j-1] = self.affine[i+1](L.scale(d, nu[j-1], I_ind[j-1]))
                     if pos_proj is not None: 
+                        nu[j-1] = self.affine[i+1](unbatch(d.unsqueeze(1) * batch(nu[j-1],n)))
                         nu_one[j-1] = self.affine[i+1](d * nu_one[j-1])
 
             nu_hat_x = self.affine[i+1](d*nu_hat_x)
             nu_hat_1 = batch(self.affine[i+1](unbatch(d.unsqueeze(1)*nu_hat_1)), n)
             
             if l1_proj is None: 
-                l1 = (nu_hat_1).abs().sum(1)
+                l1 = L.l1_norm(nu_hat_1)
+                #l1 = (nu_hat_1).abs().sum(1)
             else: 
                 # use an approximation
-                l1 = torch.median(nu_hat_1.abs(), 1)[0]
+                if test: 
+                    l1 = torch.exp((torch.log(nu_hat_1.abs())/l1_proj).sum(1))
+                else: 
+                    l1 = torch.median(nu_hat_1.abs(), 1)[0]
 
             if pos_proj is None: 
-                nu_zl = sum([(self.zl[j][self.I[j]] * (-nu[j].t()).clamp(min=0)).mm(I_collapse[j]).t()
-                                for j in range(i+1) if not self.I_empty[j]])
-                nu_zu = sum([(self.zl[j][self.I[j]] * nu[j].t().clamp(min=0)).mm(I_collapse[j]).t()
-                                for j in range(i+1) if not self.I_empty[j]])
+                nu_zl = L.nu_zl(self.zl, self.I)
+                nu_zu = L.nu_zu(self.zl, self.I)
+                # nu_zl = sum([(self.zl[j][self.I[j]] * (-nu[j].t()).clamp(min=0)).mm(I_collapse[j]).t()
+                #                 for j in range(i+1) if not self.I_empty[j]])
+                # nu_zu = sum([(self.zl[j][self.I[j]] * nu[j].t().clamp(min=0)).mm(I_collapse[j]).t()
+                #                 for j in range(i+1) if not self.I_empty[j]])
             else: 
                 nu_zl = sum([(-torch.median(nu[j].view(n,-1,nu[j].size(1)).abs(),1)[0] + nu_one[j])/2
                                 for j in range(i+1) if not self.I_empty[j]])
