@@ -46,7 +46,7 @@ class DualNetBounds:
     def __init__(self, net, X, epsilon, alpha_grad, scatter_grad, 
                  l1_proj=None,
                  test=False):
-        L = L1_engine.L1(X)
+        L = L1_engine.L1_median(X)
         # pos_proj = None
         pos_proj = l1_proj
         n = X.size(0)
@@ -77,9 +77,7 @@ class DualNetBounds:
             if not isinstance(l1_proj, int): 
                 raise ValueError('l1_proj must be an integer')
             # Use Cauchy random projections
-            eye = Variable(torch.zeros(l1_proj, 
-                                       self.affine[0].in_features
-                                      ).cauchy_()).type_as(X)
+            eye = L.input(self.affine[0].in_features, k=l1_proj)
         nu_hat_1 = self.affine[0](eye).unsqueeze(0)
 
         if l1_proj is None: 
@@ -122,37 +120,16 @@ class DualNetBounds:
             if I_nonzero.data.sum() > 0:
                 d[I_nonzero] += self.zu[-1][I_nonzero]/(self.zu[-1][I_nonzero] - self.zl[-1][I_nonzero])
 
-            # indices of [example idx, origin crossing feature idx]
-            # I_ind.append(Variable(self.I[-1].data.nonzero()))
-            
             # initialize new terms
             L.apply(self.affine[i+1], d)
             if not self.I_empty[-1]:
-
-                subset_eye = L.add_layer(self.affine[i+1], 
-                                         self.I, 
-                                         d, 
-                                         scatter_grad)
-
-                if pos_proj is not None: 
-                    out_features = self.affine[i+1].out_features
-                    subset_eye = Variable(torch.zeros(1, pos_proj, 
-                                               self.affine[i+1].in_features
-                                              ).cauchy_()).type_as(X)
-                    ones = Variable(torch.ones(1, self.affine[i+1].in_features)).type_as(X)
-
-                    if  (~self.I[-1].data).sum() > 0: 
-                        subset_eye[:,:,(~self.I[-1].data).nonzero().squeeze(1)] = 0
-                        ones[:, (~self.I[-1].data).nonzero().squeeze(1)] = 0
-                    subset_eye = self.zl[-1].unsqueeze(1)*subset_eye
-                    ones = self.zl[-1]*ones
-
-                    nu.append(self.affine[i+1](subset_eye.view(-1,subset_eye.size(2))))
-                    nu_one.append(self.affine[i+1](ones))
+                if pos_proj is None: 
+                    L.add_layer(self.affine[i+1], self.I, d, scatter_grad)
+                else: 
+                    L.add_layer(self.affine[i+1], self.I, d, scatter_grad,
+                        self.zl, k=pos_proj)
             else:
                 L.skip()
-                # nu.append(None)         
-                # I_collapse.append(None)
                 if pos_proj is not None: 
                     nu_one.append(None)
 
@@ -161,38 +138,25 @@ class DualNetBounds:
             gamma[0] = self.affine[i+1](d * gamma[0])
             for j in range(1,i+1):
                 gamma[j] = self.affine[i+1](d * gamma[j])
-                if not self.I_empty[j-1]: 
-                    # if pos_proj is None: 
-                    #     nu[j-1] = self.affine[i+1](L.scale(d, nu[j-1], I_ind[j-1]))
-                    if pos_proj is not None: 
-                        nu[j-1] = self.affine[i+1](unbatch(d.unsqueeze(1) * batch(nu[j-1],n)))
-                        nu_one[j-1] = self.affine[i+1](d * nu_one[j-1])
-
+                
             nu_hat_x = self.affine[i+1](d*nu_hat_x)
             nu_hat_1 = batch(self.affine[i+1](unbatch(d.unsqueeze(1)*nu_hat_1)), n)
             
             if l1_proj is None: 
                 l1 = L.l1_norm(nu_hat_1)
-                #l1 = (nu_hat_1).abs().sum(1)
             else: 
                 # use an approximation
                 if test: 
                     l1 = torch.exp((torch.log(nu_hat_1.abs())/l1_proj).sum(1))
                 else: 
-                    l1 = torch.median(nu_hat_1.abs(), 1)[0]
+                    l1 = L.l1_norm(nu_hat_1)
 
             if pos_proj is None: 
                 nu_zl = L.nu_zl(self.zl, self.I)
                 nu_zu = L.nu_zu(self.zl, self.I)
-                # nu_zl = sum([(self.zl[j][self.I[j]] * (-nu[j].t()).clamp(min=0)).mm(I_collapse[j]).t()
-                #                 for j in range(i+1) if not self.I_empty[j]])
-                # nu_zu = sum([(self.zl[j][self.I[j]] * nu[j].t().clamp(min=0)).mm(I_collapse[j]).t()
-                #                 for j in range(i+1) if not self.I_empty[j]])
             else: 
-                nu_zl = sum([(-torch.median(nu[j].view(n,-1,nu[j].size(1)).abs(),1)[0] + nu_one[j])/2
-                                for j in range(i+1) if not self.I_empty[j]])
-                nu_zu = sum([(-torch.median(nu[j].view(n,-1,nu[j].size(1)).abs(),1)[0] - nu_one[j])/2
-                                for j in range(i+1) if not self.I_empty[j]])
+                nu_zl = L.nu_zl(self.zl)
+                nu_zu = L.nu_zu(self.zl)
             # compute bounds
             self.zl.append(nu_hat_x + sum(gamma) - epsilon*l1 + nu_zl)
             self.zu.append(nu_hat_x + sum(gamma) + epsilon*l1 - nu_zu)
@@ -206,7 +170,6 @@ class DualNetBounds:
 
         
     def g(self, c):
-        #print(sum([I.data.sum() for I in self.I]), sum([I.data.sum() for I in self.I_neg]), sum([I.data.sum() for I in self.I_pos]))
         n = c.size(0)
         nu = [[]]*self.k
         nu[-1] = -c
