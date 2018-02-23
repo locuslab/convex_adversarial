@@ -87,7 +87,7 @@ class L1(Norm):
         return sum([(zl[j][I[j]] * self.nu[j].t().clamp(min=0)).mm(self.I_collapse[j]).t()
                                 for j in range(len(zl)) if not self.nu[j] is None])
 
-class L1_median(Norm): 
+class L1_Cauchy(Norm):
     def __init__(self, X): 
         self.X = X
         self.nu = []
@@ -96,7 +96,7 @@ class L1_median(Norm):
     def input(self, in_features, k=100): 
         return Variable(torch.zeros(k, in_features).cauchy_()).type_as(self.X)
 
-    def add_layer(self, W, I, d, scatter_grad, zl, k=100):
+    def add_layer(self, W, I, d, scatter_grad, zl=[], k=100):
         B = Variable(torch.zeros(1, k, d.size(1)).cauchy_()).type_as(self.X)
         ones = Variable(torch.ones(1, d.size(1))).type_as(self.X)
 
@@ -110,7 +110,8 @@ class L1_median(Norm):
         self.nu_one.append(W(ones))
 
     def skip(self):
-        raise NotImplemented
+        self.nu.append(None)
+        self.nu_one.append(None)
 
     def apply(self, W, d):
         for j in range(len(self.nu)): 
@@ -119,13 +120,20 @@ class L1_median(Norm):
                    self.X.size(0))))
                 self.nu_one[j] = W(d * self.nu_one[j])
 
-    def l1_norm(self, nu_hat_1): 
-        return torch.median(nu_hat_1.abs(), 1)[0]
 
     def nu_zl(self, zl):
-        return sum([(-torch.median(batch(n, self.X.size(0)).abs(),1)[0] + no)/2 
+        return sum([(-self.l1_norm(batch(n, self.X.size(0))) + no)/2 
                      for n,no in zip(self.nu, self.nu_one) if n is not None])
 
     def nu_zu(self, zl):
-        return sum([(-torch.median(batch(n, self.X.size(0)).abs(),1)[0] - no)/2 
+        return sum([(-self.l1_norm(batch(n, self.X.size(0))) - no)/2 
                      for n,no in zip(self.nu, self.nu_one) if n is not None])
+
+class L1_median(L1_Cauchy): 
+    def l1_norm(self, nu_hat_1): 
+        return torch.median(nu_hat_1.abs(), 1)[0]
+
+class L1_geometric(L1_Cauchy): 
+    def l1_norm(self, nu_hat_1): 
+        k = nu_hat_1.size(1)
+        return torch.exp((torch.log(nu_hat_1.abs())/k).sum(1))
