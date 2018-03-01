@@ -1,5 +1,5 @@
 import waitGPU
-waitGPU.wait(utilization=20, available_memory=11000, interval=10)
+waitGPU.wait(utilization=20)#, available_memory=11000, interval=10)
 
 import torch
 import torch.nn as nn
@@ -33,6 +33,8 @@ if __name__ == "__main__":
     parser.add_argument('--alpha_grad', action='store_true')
     parser.add_argument('--scatter_grad', action='store_true')
     parser.add_argument('--l1_proj', type=int, default=None)
+    parser.add_argument('--large', action='store_true')
+    parser.add_argument('--vgg', action='store_true')
     args = parser.parse_args()
     args.prefix = args.prefix or 'fashion_mnist_conv_{:.4f}_{:.4f}_0'.format(args.epsilon, args.lr).replace(".","_")
     setproctitle.setproctitle(args.prefix)
@@ -40,12 +42,18 @@ if __name__ == "__main__":
     train_log = open(args.prefix + "_train.log", "w")
     test_log = open(args.prefix + "_test.log", "w")
 
-    train_loader, test_loader = pblm.fashion_mnist_loaders(args.batch_size)
+    train_loader, _ = pblm.fashion_mnist_loaders(args.batch_size)
+    _, test_loader = pblm.fashion_mnist_loaders(2)
 
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
-    model = pblm.mnist_model().cuda()
+    if args.large: 
+        model = pblm.mnist_model_large().cuda()
+    elif args.vgg: 
+        model = pblm.mnist_model_vgg().cuda()
+    else: 
+        model = pblm.mnist_model().cuda()
 
     opt = optim.Adam(model.parameters(), lr=args.lr)
 

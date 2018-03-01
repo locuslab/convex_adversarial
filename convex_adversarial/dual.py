@@ -46,28 +46,13 @@ def unbatch(A):
 
 class DualNetBounds: 
     def __init__(self, net, X, epsilon, alpha_grad, scatter_grad, 
-                 l1_median=None, l1_geometric=None,
-                 test=False):
-        # l1_median = None
-        # l1_geometric = 100
-        if l1_median is not None: 
-            if not isinstance(l1_median, int): 
-                raise ValueError('l1_median must be an integer')
-            L = L1_engine.L1_median(X)
-            kwargs = { 'k' : l1_median }
-        elif l1_geometric is not None: 
-            if not isinstance(l1_geometric, int): 
-                raise ValueError('l1_geometric must be an integer')
-            L = L1_engine.L1_geometric(X)
-            kwargs = { 'k' : l1_geometric }
-        else: 
-            L = L1_engine.L1(X)
-            kwargs = {}
+                 l1_median=None, l1_geometric=None, delta=0.01):
 
         n = X.size(0)
         self.layers = [l for l in net if isinstance(l, (nn.Linear, nn.Conv2d))]
         self.affine_transpose = [AffineTranspose(l) for l in self.layers]
         self.affine = [Affine(l) for l in self.layers]
+
         self.k = len(self.layers)+1
 
         # initialize affine layers with a forward pass
@@ -75,6 +60,34 @@ class DualNetBounds:
         for a in self.affine: 
             _ = a(_)
             
+
+        # l1_median = None
+        # l1_geometric = 100
+        if l1_median is not None: 
+            if not isinstance(l1_median, int): 
+                raise ValueError('l1_median must be an integer')
+            num_est = sum(a.out_features for a in self.affine[:-1])
+            num_est += sum(a.out_features*i for i,a in enumerate(self.affine[:-1]))
+
+            l1_eps = L1_engine.get_epsilon(delta/num_est, l1_geometric)
+            if l1_eps > 1: 
+                raise ValueError('Delta too large / k too small to get probabilistic bound')
+            L = L1_engine.L1_median(X, l1_eps)
+            kwargs = { 'k' : l1_median }
+        elif l1_geometric is not None: 
+            if not isinstance(l1_geometric, int): 
+                raise ValueError('l1_geometric must be an integer')
+            # should change this to only use projection if # of activations > k
+            num_est = sum(a.out_features for a in self.affine[:-1])
+            num_est += sum(a.out_features*i for i,a in enumerate(self.affine[:-1]))
+
+            l1_eps = L1_engine.get_epsilon(delta/num_est, l1_geometric)
+            L = L1_engine.L1_geometric(X, l1_eps)
+            kwargs = { 'k' : l1_geometric }
+        else: 
+            L = L1_engine.L1(X)
+            kwargs = {}
+
         self.biases = [full_bias(l, self.affine[i].out_features) 
                         for i,l in enumerate(self.layers)]
         
@@ -121,8 +134,8 @@ class DualNetBounds:
                 d[I_nonzero] += self.zu[-1][I_nonzero]/(self.zu[-1][I_nonzero] - self.zl[-1][I_nonzero])
 
             # initialize new terms
+            L.apply(self.affine[i+1], d)
             if not self.I_empty[-1]:
-                L.apply(self.affine[i+1], d)
                 L.add_layer(self.affine[i+1], self.I, d, 
                                     scatter_grad, **kwargs)
             else:
@@ -137,8 +150,9 @@ class DualNetBounds:
             nu_hat_1 = batch(self.affine[i+1](unbatch(d.unsqueeze(1)*nu_hat_1)), n)
             
             l1 = L.l1_norm(nu_hat_1)
-            nu_zl = L.nu_zl(self.zl, *args)
-            nu_zu = L.nu_zu(self.zl, *args)
+            nu_zl, nu_zu = L.nu_zlu(self.zl, *args)
+            # nu_zl = L.nu_zl(self.zl, *args)
+            # nu_zu = L.nu_zu(self.zl, *args)
 
             # compute bounds
             self.zl.append(nu_hat_x + sum(gamma) - epsilon*l1 + nu_zl)
@@ -182,9 +196,9 @@ class DualNetBounds:
 
         return f
 
-def robust_loss(net, epsilon, X, y, alpha_grad, scatter_grad, l1_median=None):
+def robust_loss(net, epsilon, X, y, **kwargs):
     num_classes = net[-1].out_features
-    dual = DualNetBounds(net, X, epsilon, alpha_grad, scatter_grad, l1_median=l1_median)
+    dual = DualNetBounds(net, X, epsilon, **kwargs)
     c = Variable(torch.eye(num_classes).type_as(X.data)[y.data].unsqueeze(1) - torch.eye(num_classes).type_as(X.data).unsqueeze(0))
     if X.is_cuda:
         c = c.cuda()

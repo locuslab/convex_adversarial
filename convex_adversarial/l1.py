@@ -2,6 +2,8 @@ import torch
 from torch.autograd import Variable
 from abc import ABC, abstractmethod
 
+import numpy as np
+
 def batch(A, n): 
     return A.view(n, -1, *A.size()[1:])
 def unbatch(A): 
@@ -79,6 +81,15 @@ class L1(Norm):
     def l1_norm(self, nu_hat_1): 
         return (nu_hat_1).abs().sum(1)
 
+    def nu_zlu(self, zl, I):
+        return self.nu_zl(zl,I), self.nu_zu(zl,I)
+        # terms = [(zl[j][I[j]], self.nu[j].t().clamp(min=0))
+        #                         for j in range(len(zl)) if not self.nu[j] is None]
+        # nu_zl = sum((t0*(-t1)).mm(self.I_collapse[j]).t() for t0,t1 in terms)
+        # nu_zu = sum((t0*t1) for t0,t1 in terms)
+        # return nu_zl, nu_zu
+
+
     def nu_zl(self, zl, I):
         return sum([(zl[j][I[j]] * (-self.nu[j].t()).clamp(min=0)).mm(self.I_collapse[j]).t()
                                 for j in range(len(zl)) if not self.nu[j] is None])
@@ -120,6 +131,13 @@ class L1_Cauchy(Norm):
                    self.X.size(0))))
                 self.nu_one[j] = W(d * self.nu_one[j])
 
+    def nu_zlu(self, zl): 
+        terms = [(self.l1_norm(batch(n, self.X.size(0))),no) 
+                     for n,no in zip(self.nu, self.nu_one) if n is not None]
+        nu_zl = sum((-n + no)/2 for n,no in terms)
+        nu_zu = sum((-n - no)/2 for n,no in terms)
+        return nu_zl,nu_zu
+
 
     def nu_zl(self, zl):
         return sum([(-self.l1_norm(batch(n, self.X.size(0))) + no)/2 
@@ -130,10 +148,48 @@ class L1_Cauchy(Norm):
                      for n,no in zip(self.nu, self.nu_one) if n is not None])
 
 class L1_median(L1_Cauchy): 
+    def __init__(self, X, l1_eps): 
+        super(L1_median, self).__init__(X)
+        self.epsilon = l1_eps
+
     def l1_norm(self, nu_hat_1): 
-        return torch.median(nu_hat_1.abs(), 1)[0]
+        return torch.median(nu_hat_1.abs(), 1)[0]/(1-self.epsilon)
+
+def GR(epsilon): 
+    return (epsilon**2)/(-0.5*np.log(1+(2/np.pi*np.log(1+epsilon))**2) 
+                        + 2/np.pi*np.arctan(2/np.pi*np.log(1+epsilon))*np.log(1+epsilon))
+
+def GL(epsilon): 
+    return (epsilon**2)/(-0.5*np.log(1+(2/np.pi*np.log(1-epsilon))**2) 
+                        + 2/np.pi*np.arctan(2/np.pi*np.log(1-epsilon))*np.log(1-epsilon))
+
+def p_upper(epsilon, k): 
+    return np.exp(-k*(epsilon**2)/GR(epsilon))
+
+def p_lower(epsilon, k): 
+    return np.exp(-k*(epsilon**2)/GL(epsilon))
+
+import time
+def get_epsilon(delta, k, alpha=1e-3): 
+    """ Determine the epsilon for which the estimate is accurate
+    with probability >(1-delta) and k projection dimensions. """
+    epsilon = 0.001
+    # probability of incorrect bound 
+    start_time = time.time()
+    p_max = max(p_upper(epsilon, k), p_lower(epsilon,k))
+    while p_max > delta: 
+        epsilon *= (1+alpha)
+        p_max = max(p_upper(epsilon, k), p_lower(epsilon,k))
+    if epsilon > 1: 
+        raise ValueError('Delta too large / k too small to get probabilistic bound (epsilon > 1)')
+    return epsilon
 
 class L1_geometric(L1_Cauchy): 
+    def __init__(self, X, l1_eps): 
+        super(L1_geometric, self).__init__(X)
+        self.epsilon = l1_eps
+        # print('Geometric with factor {}'.format(l1_eps))
+
     def l1_norm(self, nu_hat_1): 
         k = nu_hat_1.size(1)
-        return torch.exp((torch.log(nu_hat_1.abs())/k).sum(1))
+        return torch.exp((torch.log(nu_hat_1.abs())/k).sum(1))/(1-self.epsilon)

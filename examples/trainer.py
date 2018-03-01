@@ -6,10 +6,15 @@ from convex_adversarial import robust_loss
 import numpy as np
 
 def train_robust(loader, model, opt, epsilon, epoch, log, verbose, 
-                 alpha_grad, scatter_grad, l1_proj):
+                 **kwargs):
     model.train()
     if epoch == 0:
         blank_state = opt.state_dict()
+
+    # kwargs = kwargs.copy()
+    # if 'l1_geometric' in kwargs and kwargs['l1_geometric'] is not None: 
+    #     kwargs['l1_median'] = kwargs['l1_geometric']
+    #     del kwargs['l1_geometric']
 
     for i, (X,y) in enumerate(loader):
         X,y = X.cuda(), y.cuda().long()
@@ -18,9 +23,7 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
 
         robust_ce, robust_err = robust_loss(model, epsilon, 
                                              Variable(X), Variable(y), 
-                                             alpha_grad=alpha_grad, 
-                                             scatter_grad=scatter_grad,
-                                             l1_proj=l1_proj)
+                                             **kwargs)
 
         out = model(Variable(X))
         ce = nn.CrossEntropyLoss()(out, Variable(y))
@@ -41,8 +44,14 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
     torch.cuda.empty_cache()
 
 
-def evaluate_robust(loader, model, epsilon, epoch, log, verbose):
+def evaluate_robust(loader, model, epsilon, epoch, log, verbose, **kwargs):
     model.eval()
+
+    kwargs = kwargs.copy()
+    if 'l1_median' in kwargs and kwargs['l1_median'] is not None: 
+        kwargs['l1_geometric'] = kwargs['l1_median']
+        del kwargs['l1_median']
+
     for i, (X,y) in enumerate(loader):
         X,y = X.cuda(), y.cuda().long()
         if y.dim() == 2: 
@@ -50,8 +59,7 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose):
         robust_ce, robust_err = robust_loss(model, epsilon, 
                                             Variable(X, volatile=True), 
                                             Variable(y, volatile=True),
-                                             alpha_grad=True, 
-                                             scatter_grad=True)
+                                             **kwargs)
         out = model(Variable(X))
         ce = nn.CrossEntropyLoss()(out, Variable(y))
         err = (out.data.max(1)[1] != y).float().sum()  / X.size(0)
