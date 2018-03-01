@@ -176,13 +176,16 @@ class DualNetBounds:
 
         return f
 
-def robust_loss(net, epsilon, X, y, alpha_grad, scatter_grad):
+def robust_loss(net, epsilon, X, y, 
+                size_average=True, alpha_grad=False, scatter_grad=False):
     num_classes = net[-1].out_features
     dual = DualNetBounds(net, X, epsilon, alpha_grad, scatter_grad)
     c = Variable(torch.eye(num_classes).type_as(X.data)[y.data].unsqueeze(1) - torch.eye(num_classes).type_as(X.data).unsqueeze(0))
     if X.is_cuda:
         c = c.cuda()
     f = -dual.g(c)
-    err = (f.data.max(1)[1] != y.data).sum()/X.size(0)
-    ce_loss = nn.CrossEntropyLoss()(f, y)
+    err = (f.data.max(1)[1] != y.data)
+    if size_average: 
+        err = err.sum()/X.size(0)
+    ce_loss = nn.CrossEntropyLoss(size_average=size_average)(f, y)
     return ce_loss, err
