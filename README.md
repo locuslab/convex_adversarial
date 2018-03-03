@@ -1,7 +1,28 @@
-# Provably Robust neural networks
+# Provably robust neural networks
 
 *A repository for training provably robust neural networks by optimizing
 convex outer bounds on the adversarial polytope. Created by [Eric Wong](https://riceric22.github.io) and [Zico Kolter](http://zicokolter.com).*
+
+[paper]: https://arxiv.org/abs/1711.00851
+
+## Installation & Usage
+You can install this repository with 
+`pip install convex_adversarial`. The package contains the following functions: 
++ `robust_loss(net, epsilon, X, y, 
+                size_average=True, alpha_grad=False, scatter_grad=False)`
+    computes a robust loss function for a given ReLU network `net` and l1 
+    radius `epsilon` for examples `X` and their labels `y`. You can use 
+    this as a drop in replacement for, say, `nn.CrossEntropyLoss`, and is
+    equivalent to the objective of Equation 14 in the paper. 
++ `DualNetBounds(net, X, epsilon, alpha_grad=False, scatter_grad=False)`
+    is a class that computes the layer-wise upper and lower bounds for all
+    activations in the network. This is useful if you are only interested 
+    in the bounds and not the robust loss, and corresponds to Algorithm 
+    1 in the paper. 
++ `DualNetBounds.g(self, c)` is a class function that computes the lower
+    bound on the primal problem described in the paper for a given 
+    objective vector c. This corresponds to computing objective of Theorem 1 in
+    the paper (Equation 5). 
 
 ## Why do we need robust networks? 
 While networks are capable of representing highly complex functions. For
@@ -35,7 +56,7 @@ the adversarial polytope to lower bound the output. This lower bound can be
 expressed as another deep network with the same model parameters, and
 optimizing this lower bound allows us to guarantee robustness of the network.
 
-The long version: see our paper, [Provable defenses against adversarial examples via the convex outer adversarial polytope](https://arxiv.org/abs/1711.00851). 
+The long version: see our paper, [Provable defenses against adversarial examples via the convex outer adversarial polytope][paper]. 
 
 ## What difference does this make? 
 We illustrate the power of training robust networks in the following two scenarios: 2D toy case for a visualization, and on the MNIST dataset. 
@@ -75,7 +96,8 @@ calculate a *robust error* which gives an provable upper bound on the error
 caused by *any* adversarial perturbation. In this case, the robust network has
 a robust error of 5.8%, and so we are guaranteed that no adversarial attack
 can ever get an error rate of larger than 5.8%. In comparison, the robust
-error of the standard network is 100%. 
+error of the standard network is 100%. More results on HAR, Fashion-MNIST, and
+SVHN can be found in the paper. 
 
 <!-- We can also visualize the difference in how these networks train. Again, the
 standard network is on the left and the robustly trained network is on the
