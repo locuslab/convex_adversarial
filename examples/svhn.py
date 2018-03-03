@@ -1,6 +1,5 @@
 import waitGPU
-waitGPU.wait(utilization=20, available_memory=10000, interval=10)
-
+waitGPU.wait(utilization=20, interval=60)
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -18,31 +17,33 @@ from trainer import *
 
 if __name__ == "__main__": 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--batch_size', type=int, default=50)
+    parser.add_argument('--batch_size', type=int, default=20)
     parser.add_argument('--epochs', type=int, default=20)
     parser.add_argument('--seed', type=int, default=0)
-    parser.add_argument('--verbose', type=int, default=1)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--epsilon", type=float, default=0.1)
     parser.add_argument("--starting_epsilon", type=float, default=None)
     parser.add_argument('--prefix')
     parser.add_argument('--baseline', action='store_true')
+    parser.add_argument('--verbose', type=int, default='1')
     parser.add_argument('--alpha_grad', action='store_true')
     parser.add_argument('--scatter_grad', action='store_true')
     parser.add_argument('--l1_proj', type=int, default=None)
+
     args = parser.parse_args()
-    args.prefix = args.prefix or 'mnist_conv_{:.4f}_{:.4f}_0'.format(args.epsilon, args.lr).replace(".","_")
-    setproctitle.setproctitle(args.prefix)
+    args.prefix = args.prefix or 'svhn_conv_{:.4f}_{:.4f}_0'.format(args.epsilon, args.lr).replace(".","_")
+    setproctitle.setproctitle(args.prefix) 
 
     train_log = open(args.prefix + "_train.log", "w")
     test_log = open(args.prefix + "_test.log", "w")
 
-    train_loader, test_loader = pblm.mnist_loaders(args.batch_size)
+    train_loader, test_loader = pblm.svhn_loaders(args.batch_size)
 
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
-    model = pblm.mnist_model().cuda()
+    # new svhn
+    model = pblm.svhn_model().cuda()
 
     opt = optim.Adam(model.parameters(), lr=args.lr)
     for t in range(args.epochs):

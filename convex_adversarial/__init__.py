@@ -1,1 +1,1 @@
-from .dual import DualNetBounds, robust_loss
+from .dual import DualNetBounds, robust_loss, Affine, AffineTranspose, full_bias
