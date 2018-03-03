@@ -42,7 +42,7 @@ def unbatch(A):
     return A.view(-1, *A.size()[2:])
 
 class DualNetBounds: 
-    def __init__(self, net, X, epsilon, alpha_grad, scatter_grad):
+    def __init__(self, net, X, epsilon, alpha_grad=False, scatter_grad=False):
         n = X.size(0)
 
         self.layers = [l for l in net if isinstance(l, (nn.Linear, nn.Conv2d))]
