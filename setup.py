@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 setup(
     name='convex_adversarial',
-    version='0.1',
+    version='0.2',
     description="A library implementing robust loss functions for ReLU based neural networks. ",
     author='Eric Wong',
     author_email='ericwong@cs.cmu.edu',
