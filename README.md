@@ -1,7 +1,7 @@
 # Provably robust neural networks
 
 *A repository for training provably robust neural networks by optimizing
-convex outer bounds on the adversarial polytope. Created by [Eric Wong](https://riceric22.github.io) and [Zico Kolter](http://zicokolter.com).*
+convex outer bounds on the adversarial polytope. Created by [Eric Wong](https://riceric22.github.io) and [Zico Kolter](http://zicokolter.com). [Link to arXiv paper][paper].*
 
 [paper]: https://arxiv.org/abs/1711.00851
 
@@ -97,7 +97,7 @@ caused by *any* adversarial perturbation. In this case, the robust network has
 a robust error of 5.8%, and so we are guaranteed that no adversarial attack
 can ever get an error rate of larger than 5.8%. In comparison, the robust
 error of the standard network is 100%. More results on HAR, Fashion-MNIST, and
-SVHN can be found in the paper. 
+SVHN can be found in the [paper][paper]. 
 
 <!-- We can also visualize the difference in how these networks train. Again, the
 standard network is on the left and the robustly trained network is on the
