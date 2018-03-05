@@ -5,6 +5,12 @@ convex outer bounds on the adversarial polytope. Created by [Eric Wong](https://
 
 [paper]: https://arxiv.org/abs/1711.00851
 
+## News
++ 3/4/2018 - Updated paper with more experiments. Code migrated to work with
+  PyTorch 0.3.0+. Real mini-batching implemented, with a 5x speedup over the
+  old codebase, and several NaN bugfixes. 
++ 11/2/2017 - Initial preprint and release of codebase. 
+
 ## Installation & Usage
 You can install this repository with 
 `pip install convex_adversarial`. The package contains the following functions: 
@@ -59,7 +65,7 @@ optimizing this lower bound allows us to guarantee robustness of the network.
 The long version: see our paper, [Provable defenses against adversarial examples via the convex outer adversarial polytope][paper]. 
 
 ## What difference does this make? 
-We illustrate the power of training robust networks in the following two scenarios: 2D toy case for a visualization, and on the MNIST dataset. 
+We illustrate the power of training robust networks in the following two scenarios: 2D toy case for a visualization, and on the MNIST dataset. More experiments are in the paper. 
 
 ### 2D toy example
 To illustrate the difference, consider a binary classification task on 2D
@@ -98,18 +104,6 @@ a robust error of 5.8%, and so we are guaranteed that no adversarial attack
 can ever get an error rate of larger than 5.8%. In comparison, the robust
 error of the standard network is 100%. More results on HAR, Fashion-MNIST, and
 SVHN can be found in the [paper][paper]. 
-
-<!-- We can also visualize the difference in how these networks train. Again, the
-standard network is on the left and the robustly trained network is on the
-right. The standard network quickly learns a classifier with high accuracy by greedily ex but
-obviously doesn't care about the label of the regions around each example,
-whereas the robustly trained network is more cautious and tries to ensure
-robustness.
-
-<p float="left">
-<img src="https://github.com/locuslab/convex_adversarial.release/blob/master/images/normal.gif" width="300">
-<img src="https://github.com/locuslab/convex_adversarial.release/blob/master/images/robust.gif" width="300">
-</p> -->
 
 ## What is in this repository? 
 + The code implementing the robust loss function that measures the convex
