@@ -9,6 +9,7 @@ convex outer bounds on the adversarial polytope. Created by [Eric Wong](https://
 + 3/4/2018 - Updated paper with more experiments. Code migrated to work with
   PyTorch 0.3.0+. Real mini-batching implemented, with a 5x speedup over the
   old codebase, and several NaN bugfixes. 
++ 12/8/2017 - Best defense paper at the NIPS 2017 ML & Security Workshop
 + 11/2/2017 - Initial preprint and release of codebase. 
 
 ## Installation & Usage
