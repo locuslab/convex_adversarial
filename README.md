@@ -1,7 +1,7 @@
 # Provably Robust neural networks
 
 *A repository for training provably robust neural networks by optimizing
-convex outer bounds on the adversarial polytope. Created by [Zico Kolter](http://zicokolter.com) and [Eric Wong](https://riceric22.github.io).*
+convex outer bounds on the adversarial polytope. Created by [Eric Wong](https://riceric22.github.io) and [Zico Kolter](http://zicokolter.com).*
 
 ## Why do we need robust networks? 
 While networks are capable of representing highly complex functions. For
@@ -66,15 +66,15 @@ when using attacks such as the fast gradient sign method (FGS) and projected gra
 
 |          | Base error | FGS error | PGD Error | Robust Error |
 | --------:| ----------:|----------:| ---------:| ------------:|
-| Original |       1.2% |     39.7% |     94.1% |         100% |
-|   Robust |       2.9% |      5.8% |      6.2% |         8.4% |
+| Original |       1.1% |     50.0% |     81.7% |         100% |
+|   Robust |       1.8% |      3.9% |      4.1% |         5.8% |
 
 On the other hand, the robust network is significantly less affected by these
 attacks. In fact, when optimizing the robust loss, we can additionally
 calculate a *robust error* which gives an provable upper bound on the error
 caused by *any* adversarial perturbation. In this case, the robust network has
-a robust error of 8.3%, and so we are guaranteed that no adversarial attack
-can ever get an error rate of larger than 8.3%. In comparison, the robust
+a robust error of 5.8%, and so we are guaranteed that no adversarial attack
+can ever get an error rate of larger than 5.8%. In comparison, the robust
 error of the standard network is 100%. 
 
 <!-- We can also visualize the difference in how these networks train. Again, the
@@ -94,5 +94,8 @@ robustness.
   outer bounds on the adversarial polytope as described in the paper. It is
   implemented for linear and convolutional networks with ReLU activation
 + Examples, containing the following: 
-  + Code to train a robust MNIST classifier
+  + Code to train a robust classifier for the MNIST, Fashion-MNIST, HAR, and SVHN datasets. 
   + Code to generate and plot the 2D toy example.
+  + Code to find minimum distances to the decision boundary of the neural network
+  + Code to attack models using FGS and PGD
+  + Code to solve the primal problem exactly using CVXPY

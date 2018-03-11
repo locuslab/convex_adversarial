@@ -25,7 +25,7 @@ if __name__ == "__main__":
     parser.add_argument('--verbose', type=int, default=1)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--epsilon", type=float, default=0.1)
-    parser.add_argument("--starting_epsilon", type=float, default=None)
+    parser.add_argument("--starting_epsilon", type=float, default=0.05)
     parser.add_argument('--prefix')
     parser.add_argument('--baseline', action='store_true')
     parser.add_argument('--alpha_grad', action='store_true')
