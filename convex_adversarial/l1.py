@@ -170,7 +170,7 @@ def p_lower(epsilon, k):
     return np.exp(-k*(epsilon**2)/GL(epsilon))
 
 import time
-def get_epsilon(delta, k, alpha=1e-3): 
+def get_epsilon(delta, k, alpha=1e-2): 
     """ Determine the epsilon for which the estimate is accurate
     with probability >(1-delta) and k projection dimensions. """
     epsilon = 0.001

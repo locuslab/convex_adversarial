@@ -69,7 +69,7 @@ class DualNetBounds:
             num_est = sum(a.out_features for a in self.affine[:-1])
             num_est += sum(a.out_features*i for i,a in enumerate(self.affine[:-1]))
 
-            l1_eps = L1_engine.get_epsilon(delta/num_est, l1_geometric)
+            l1_eps = L1_engine.get_epsilon(delta/num_est, l1_median)
             if l1_eps > 1: 
                 raise ValueError('Delta too large / k too small to get probabilistic bound')
             L = L1_engine.L1_median(X, l1_eps)

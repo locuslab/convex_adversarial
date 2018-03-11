@@ -11,10 +11,10 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
     if epoch == 0:
         blank_state = opt.state_dict()
 
-    # kwargs = kwargs.copy()
-    # if 'l1_geometric' in kwargs and kwargs['l1_geometric'] is not None: 
-    #     kwargs['l1_median'] = kwargs['l1_geometric']
-    #     del kwargs['l1_geometric']
+    kwargs = kwargs.copy()
+    if 'l1_geometric' in kwargs and kwargs['l1_geometric'] is not None: 
+        kwargs['l1_median'] = kwargs['l1_geometric']
+        del kwargs['l1_geometric']
 
     for i, (X,y) in enumerate(loader):
         X,y = X.cuda(), y.cuda().long()
