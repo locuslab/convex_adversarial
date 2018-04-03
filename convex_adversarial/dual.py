@@ -46,7 +46,18 @@ def unbatch(A):
 
 class DualNetBounds: 
     def __init__(self, net, X, epsilon, alpha_grad, scatter_grad, 
-                 l1_median=None, l1_geometric=None, delta=0.01):
+                 l1_proj=None, l1_eps=None, m=None, median=False,
+                 geometric=False):
+        """ 
+        net : ReLU network
+        X : minibatch of examples
+        epsilon : size of l1 norm ball to be robust against adversarial examples
+        alpha_grad : flag to propagate gradient through alpha
+        scatter_grad : flag to propagate gradient through scatter operation
+        l1 : size of l1 projection
+        l1_eps : the bound is correct up to a 1/(1-l1_eps) factor
+        m : number of probabilistic bounds to take the max over
+        """
 
         n = X.size(0)
         self.layers = [l for l in net if isinstance(l, (nn.Linear, nn.Conv2d))]
@@ -63,27 +74,17 @@ class DualNetBounds:
 
         # l1_median = None
         # l1_geometric = 100
-        if l1_median is not None: 
-            if not isinstance(l1_median, int): 
-                raise ValueError('l1_median must be an integer')
-            num_est = sum(a.out_features for a in self.affine[:-1])
-            num_est += sum(a.out_features*i for i,a in enumerate(self.affine[:-1]))
-
-            l1_eps = L1_engine.get_epsilon(delta/num_est, l1_median)
-            if l1_eps > 1: 
-                raise ValueError('Delta too large / k too small to get probabilistic bound')
-            L = L1_engine.L1_median(X, l1_eps)
-            kwargs = { 'k' : l1_median }
-        elif l1_geometric is not None: 
-            if not isinstance(l1_geometric, int): 
-                raise ValueError('l1_geometric must be an integer')
+        if l1_proj is not None and median: 
+            if not isinstance(l1_proj, int): 
+                raise ValueError('l1 must be an integer')
+            L = L1_engine.L1_median(X, l1_proj, m, l1_eps)
+            kwargs = { }
+        elif l1_proj is not None and geometric: 
+            if not isinstance(l1_proj, int): 
+                raise ValueError('l1 must be an integer')
             # should change this to only use projection if # of activations > k
-            num_est = sum(a.out_features for a in self.affine[:-1])
-            num_est += sum(a.out_features*i for i,a in enumerate(self.affine[:-1]))
-
-            l1_eps = L1_engine.get_epsilon(delta/num_est, l1_geometric)
-            L = L1_engine.L1_geometric(X, l1_eps)
-            kwargs = { 'k' : l1_geometric }
+            L = L1_engine.L1_geometric(X, l1_proj, m, l1_eps)
+            kwargs = { } 
         else: 
             L = L1_engine.L1(X)
             kwargs = {}
@@ -109,7 +110,7 @@ class DualNetBounds:
         I_collapse = []
         I_ind = []
 
-        if l1_median is not None or l1_geometric is not None: 
+        if l1_proj is not None: 
             kwargs['zl'] = self.zl
             args = tuple()
         else:
