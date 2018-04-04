@@ -45,7 +45,7 @@ def unbatch(A):
     return A.view(-1, *A.size()[2:])
 
 class DualNetBounds: 
-    def __init__(self, net, X, epsilon, alpha_grad, scatter_grad, 
+    def __init__(self, net, X, epsilon, alpha_grad=False, scatter_grad=False, 
                  l1_proj=None, l1_eps=None, m=None, median=False,
                  geometric=False):
         """ 
@@ -152,8 +152,6 @@ class DualNetBounds:
             
             l1 = L.l1_norm(nu_hat_1)
             nu_zl, nu_zu = L.nu_zlu(self.zl, *args)
-            # nu_zl = L.nu_zl(self.zl, *args)
-            # nu_zu = L.nu_zu(self.zl, *args)
 
             # compute bounds
             self.zl.append(nu_hat_x + sum(gamma) - epsilon*l1 + nu_zl)
@@ -176,7 +174,6 @@ class DualNetBounds:
             if i > 0:
                 # avoid in place operation
                 out = nu[i].clone()
-                # print(out.size(), self.I_neg[i-1].size())
                 out[self.I_neg[i-1].unsqueeze(1)] = 0
                 if not self.I_empty[i-1]:
                     if self.alpha_grad: 
