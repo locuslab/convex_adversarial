@@ -6,7 +6,7 @@ from convex_adversarial import robust_loss
 import numpy as np
 
 def train_robust(loader, model, opt, epsilon, epoch, log, verbose, 
-                 alpha_grad, scatter_grad, l1_proj):
+                 **kwargs):
     model.train()
     if epoch == 0:
         blank_state = opt.state_dict()
@@ -18,8 +18,7 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
 
         robust_ce, robust_err = robust_loss(model, epsilon, 
                                              Variable(X), Variable(y), 
-                                             alpha_grad=alpha_grad, 
-                                             scatter_grad=scatter_grad)
+                                             **kwargs, median=True)
 
         out = model(Variable(X))
         ce = nn.CrossEntropyLoss()(out, Variable(y))
@@ -37,10 +36,12 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
         log.flush()
 
         del X, y, robust_ce, out, ce
+        torch.cuda.empty_cache()
 
 
-def evaluate_robust(loader, model, epsilon, epoch, log, verbose):
+def evaluate_robust(loader, model, epsilon, epoch, log, verbose, **kwargs):
     model.eval()
+
     for i, (X,y) in enumerate(loader):
         X,y = X.cuda(), y.cuda().long()
         if y.dim() == 2: 
@@ -48,8 +49,7 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose):
         robust_ce, robust_err = robust_loss(model, epsilon, 
                                             Variable(X, volatile=True), 
                                             Variable(y, volatile=True),
-                                             alpha_grad=True, 
-                                             scatter_grad=True)
+                                             **kwargs, geometric=True)
         out = model(Variable(X))
         ce = nn.CrossEntropyLoss()(out, Variable(y))
         err = (out.data.max(1)[1] != y).float().sum()  / X.size(0)
@@ -60,6 +60,7 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose):
         log.flush()
 
         del X, y, robust_ce, out, ce
+        torch.cuda.empty_cache()
 
 def train_baseline(loader, model, opt, epoch, log, verbose):
     model.train()

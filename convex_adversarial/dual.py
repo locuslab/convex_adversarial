@@ -7,6 +7,7 @@ import numpy as np
 # import cvxpy as cp
 
 from . import affine as Aff
+from . import l1 as L1_engine
 
 def AffineTranspose(l): 
     if isinstance(l, nn.Linear): 
@@ -30,6 +31,8 @@ def full_bias(l, n=None):
     if isinstance(l, nn.Linear): 
         return l.bias.view(1,-1)
     elif isinstance(l, nn.Conv2d): 
+        if n is None: 
+            raise ValueError("Need to pass n=<output dimension>")
         b = l.bias.unsqueeze(1).unsqueeze(2)
         k = int((n/(b.numel()))**0.5)
         return b.expand(b.numel(),k,k).contiguous().view(1,-1)
@@ -42,12 +45,25 @@ def unbatch(A):
     return A.view(-1, *A.size()[2:])
 
 class DualNetBounds: 
-    def __init__(self, net, X, epsilon, alpha_grad=False, scatter_grad=False):
-        n = X.size(0)
+    def __init__(self, net, X, epsilon, alpha_grad=False, scatter_grad=False, 
+                 l1_proj=None, l1_eps=None, m=None, median=False,
+                 geometric=False):
+        """ 
+        net : ReLU network
+        X : minibatch of examples
+        epsilon : size of l1 norm ball to be robust against adversarial examples
+        alpha_grad : flag to propagate gradient through alpha
+        scatter_grad : flag to propagate gradient through scatter operation
+        l1 : size of l1 projection
+        l1_eps : the bound is correct up to a 1/(1-l1_eps) factor
+        m : number of probabilistic bounds to take the max over
+        """
 
+        n = X.size(0)
         self.layers = [l for l in net if isinstance(l, (nn.Linear, nn.Conv2d))]
         self.affine_transpose = [AffineTranspose(l) for l in self.layers]
         self.affine = [Affine(l) for l in self.layers]
+
         self.k = len(self.layers)+1
 
         # initialize affine layers with a forward pass
@@ -55,18 +71,33 @@ class DualNetBounds:
         for a in self.affine: 
             _ = a(_)
             
+
+        # l1_median = None
+        # l1_geometric = 100
+        if l1_proj is not None and median: 
+            if not isinstance(l1_proj, int): 
+                raise ValueError('l1 must be an integer')
+            L = L1_engine.L1_median(X, l1_proj, m, l1_eps)
+            kwargs = { }
+        elif l1_proj is not None and geometric: 
+            if not isinstance(l1_proj, int): 
+                raise ValueError('l1 must be an integer')
+            # should change this to only use projection if # of activations > k
+            L = L1_engine.L1_geometric(X, l1_proj, m, l1_eps)
+            kwargs = { } 
+        else: 
+            L = L1_engine.L1(X)
+            kwargs = {}
+
         self.biases = [full_bias(l, self.affine[i].out_features) 
                         for i,l in enumerate(self.layers)]
         
         gamma = [self.biases[0]]
-        nu = []
         nu_hat_x = self.affine[0](X)
-
-        eye = Variable(torch.eye(self.affine[0].in_features)).type_as(X)
+        eye = L.input(self.affine[0].in_features, **kwargs)
         nu_hat_1 = self.affine[0](eye).unsqueeze(0)
 
-        l1 = (nu_hat_1).abs().sum(1)
-        
+        l1 = L.l1_norm(nu_hat_1)
         self.zl = [nu_hat_x + gamma[0] - epsilon*l1]
         self.zu = [nu_hat_x + gamma[0] + epsilon*l1]
 
@@ -78,6 +109,12 @@ class DualNetBounds:
         self.epsilon = epsilon
         I_collapse = []
         I_ind = []
+
+        if l1_proj is not None: 
+            kwargs['zl'] = self.zl
+            args = tuple()
+        else:
+            args = (self.I,)
 
         # set flags
         self.scatter_grad = scatter_grad
@@ -97,47 +134,28 @@ class DualNetBounds:
             if I_nonzero.data.sum() > 0:
                 d[I_nonzero] += self.zu[-1][I_nonzero]/(self.zu[-1][I_nonzero] - self.zl[-1][I_nonzero])
 
-            # indices of [example idx, origin crossing feature idx]
-            I_ind.append(Variable(self.I[-1].data.nonzero()))
-            
             # initialize new terms
+            L.apply(self.affine[i+1], d)
             if not self.I_empty[-1]:
-                out_features = self.affine[i+1].out_features
-
-                subset_eye = Variable(X.data.new(self.I[-1].data.sum(), d.size(1)).zero_())
-                subset_eye.scatter_(1, I_ind[-1][:,1,None], d[self.I[-1]][:,None])
-
-                if not scatter_grad: 
-                    subset_eye = subset_eye.detach()
-                nu.append(self.affine[i+1](subset_eye))
-
-                # create a matrix that collapses the minibatch of origin-crossing indices 
-                # back to the sum of each minibatch
-                I_collapse.append(Variable(X.data.new(I_ind[-1].size(0), X.size(0)).zero_()))
-                I_collapse[-1].scatter_(1, I_ind[-1][:,0][:,None], 1)
+                L.add_layer(self.affine[i+1], self.I, d, 
+                                    scatter_grad, **kwargs)
             else:
-                nu.append(None)         
-                I_collapse.append(None)
-            gamma.append(self.biases[i+1])
-            # propagate terms
-            gamma[0] = self.affine[i+1](d * gamma[0])
-            for j in range(1,i+1):
-                gamma[j] = self.affine[i+1](d * gamma[j])
-                if not self.I_empty[j-1]: 
-                    nu[j-1] = self.affine[i+1](d[I_ind[j-1][:,0]] * nu[j-1])
+                L.skip()
 
+            gamma.append(self.biases[i+1])
+            # propagate bias terms
+            for j in range(0,i+1):
+                gamma[j] = self.affine[i+1](d * gamma[j])
+                
             nu_hat_x = self.affine[i+1](d*nu_hat_x)
             nu_hat_1 = batch(self.affine[i+1](unbatch(d.unsqueeze(1)*nu_hat_1)), n)
             
-            l1 = (nu_hat_1).abs().sum(1)
-            
+            l1 = L.l1_norm(nu_hat_1)
+            nu_zl, nu_zu = L.nu_zlu(self.zl, *args)
+
             # compute bounds
-            self.zl.append(nu_hat_x + sum(gamma) - epsilon*l1 + 
-                           sum([(self.zl[j][self.I[j]] * (-nu[j].t()).clamp(min=0)).mm(I_collapse[j]).t()
-                                for j in range(i+1) if not self.I_empty[j]]))
-            self.zu.append(nu_hat_x + sum(gamma) + epsilon*l1 - 
-                           sum([(self.zl[j][self.I[j]] * nu[j].t().clamp(min=0)).mm(I_collapse[j]).t()
-                                for j in range(i+1) if not self.I_empty[j]]))
+            self.zl.append(nu_hat_x + sum(gamma) - epsilon*l1 + nu_zl)
+            self.zu.append(nu_hat_x + sum(gamma) + epsilon*l1 - nu_zu)
         
         self.s = [torch.zeros_like(u) for l,u in zip(self.zl, self.zu)]
 
@@ -177,9 +195,9 @@ class DualNetBounds:
         return f
 
 def robust_loss(net, epsilon, X, y, 
-                size_average=True, alpha_grad=False, scatter_grad=False):
+                size_average=True, **kwargs):
     num_classes = net[-1].out_features
-    dual = DualNetBounds(net, X, epsilon, alpha_grad, scatter_grad)
+    dual = DualNetBounds(net, X, epsilon, **kwargs)
     c = Variable(torch.eye(num_classes).type_as(X.data)[y.data].unsqueeze(1) - torch.eye(num_classes).type_as(X.data).unsqueeze(0))
     if X.is_cuda:
         c = c.cuda()
