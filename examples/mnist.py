@@ -1,7 +1,7 @@
-# import waitGPU
-import setGPU
-# waitGPU.wait(utilization=20, available_memory=10000, interval=10)
-# waitGPU.wait(gpu_ids=[0])
+import waitGPU
+# import setGPU
+# waitGPU.wait(utilization=20, available_memory=10000, interval=60)
+waitGPU.wait(gpu_ids=[3])
 
 import torch
 import torch.nn as nn
@@ -64,8 +64,12 @@ if __name__ == "__main__":
 
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
-
-    model = pblm.mnist_model().cuda() 
+    if args.vgg: 
+        model = pblm.mnist_model_vgg().cuda()
+    elif args.large: 
+        model = pblm.mnist_model_large().cuda()
+    else: 
+        model = pblm.mnist_model().cuda() 
 
     if args.l1_proj is not None: 
         for X,y in train_loader: 
