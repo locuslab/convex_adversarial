@@ -100,10 +100,12 @@ class L1_Cauchy():
         self.W = W
 
         if self.is_input: 
-            self.nu = W(Variable(X.data.new(k*m, W.in_features).cauchy_())).unsqueeze(0)
+            self.nu = W(Variable(torch.zeros(self.k*self.m, W.in_features).cauchy_()).type_as(self.X)).unsqueeze(0)
+            # self.nu = W(Variable(X.data.new(k*m, W.in_features).cauchy_())).unsqueeze(0)
             self.nu_one = None
         else:
-            self.nu = Variable(X.data.new(1, k*m, d.size(1)).cauchy_())
+            self.nu = Variable(torch.zeros(1, self.k*self.m, d.size(1)).cauchy_()).type_as(self.X)
+            # self.nu = Variable(X.data.new(1, k*m, d.size(1)).cauchy_())
             self.nu_one = Variable(X.data.new(1, d.size(1)).fill_(1))
 
             if  (~I.data).sum() > 0: 

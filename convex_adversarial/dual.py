@@ -114,7 +114,6 @@ class DualNetBounds:
 
         L0 = select_L(X, l1_proj, m, l1_eps, self.affine[0])
         l1 = L0.l1_norm()
-
         # eye = L.input(self.affine[0].in_features, **kwargs)
         # nu_hat_1 = self.affine[0](eye).unsqueeze(0)
         # l1 = L.l1_norm(nu_hat_1)
