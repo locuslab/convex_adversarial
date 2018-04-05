@@ -49,7 +49,7 @@ def select_L(X, k, m, l1_eps, W, median=False, geometric=False,
     if k is None or k*m > W.in_features: 
         return L1_engine.L1(X, W, **kwargs)
     else: 
-        if not isinstance(l1_proj, int): 
+        if not isinstance(k, int): 
             raise ValueError('l1 must be an integer')
 
         if median: 
@@ -128,12 +128,6 @@ class DualNetBounds:
         I_collapse = []
         Ls = []
 
-        if l1_proj is not None: 
-            kwargs['zl'] = self.zl
-            args = tuple()
-        else:
-            args = (self.I,)
-
         # set flags
         self.scatter_grad = scatter_grad
         self.alpha_grad = alpha_grad
@@ -183,11 +177,10 @@ class DualNetBounds:
             l1 = L0.l1_norm()
 
             # nu_zl, nu_zu = L.nu_zlu(self.zl, *args)
-            nu_zls, nu_zus = zip(*[L.nu_zlu() for L in Ls])
+            nu_zls, nu_zus = zip(*[L.nu_zlu() for L in Ls if L is not None])
 
             # compute bounds
-            # print(nu_hat_x.size(), sum(gamma).size(), l1.size(), sum
-            #     (nu_zl).size())
+            # print(nu_hat_x.size(), sum(gamma).size(), l1.size(), sum(nu_zls).size())
             self.zl.append(nu_hat_x + sum(gamma) - epsilon*l1 + sum(nu_zls))
             self.zu.append(nu_hat_x + sum(gamma) + epsilon*l1 - sum(nu_zus))
         

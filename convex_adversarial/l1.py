@@ -83,12 +83,12 @@ class L1():
 
     def l1_norm(self): 
         return self.nu.abs().sum(1)
-        
-class L1_Cauchy(Norm): 
+
+class L1_Cauchy(): 
     def __init__(self, X, k, m, l1_eps, W, I=None, d=None, scatter_grad=None, zl=None): 
         kwargs = [I, d, scatter_grad]
-        if (not all(kwarg is None for kwarg in kwargs) or 
-            not all(kwarg is not None for kwarg in kwargs)):
+        if not (all(kwarg is None for kwarg in kwargs) or 
+            all(kwarg is not None for kwarg in kwargs)):
             raise ValueError('Must either specify all keyword arguments or none')
 
         self.is_input = all(kwarg is None for kwarg in kwargs)
@@ -100,17 +100,20 @@ class L1_Cauchy(Norm):
         self.W = W
 
         if self.is_input: 
-            self.nu = W(Variable(X.new(k*m, W.in_features).cauchy_())).unsqueeze(0)
+            self.nu = W(Variable(X.data.new(k*m, W.in_features).cauchy_())).unsqueeze(0)
             self.nu_one = None
         else:
-            self.nu = Variable(X.new(1, k*m, d.size(1)).cauchy_())
-            self.nu_one = Variable(X.new(1, d.size(1)).fill_(1))
+            self.nu = Variable(X.data.new(1, k*m, d.size(1)).cauchy_())
+            self.nu_one = Variable(X.data.new(1, d.size(1)).fill_(1))
 
-            if  (~I[-1].data).sum() > 0: 
+            if  (~I.data).sum() > 0: 
                 self.nu[:,:,(~I.data).nonzero().squeeze(1)] = 0
                 self.nu_one[:, (~I.data).nonzero().squeeze(1)] = 0
             self.nu = zl.unsqueeze(1)*self.nu
             self.nu_one = zl*self.nu_one
+
+            self.nu = W(unbatch(self.nu))
+            self.nu_one = W(self.nu_one)
 
     def apply(self, W, d):
         self.nu = W(unbatch(d.unsqueeze(1) * batch(self.nu, self.X.size(0))))
@@ -130,7 +133,7 @@ class L1_Cauchy(Norm):
 class L1_median(L1_Cauchy): 
     def l1_norm(self): 
         # return torch.median(nu_hat_1.abs(), 1)[0]/(1-self.epsilon)
-        nu_hat_1 = self.nu.view(-1, self.m, self.k, self.nu.size(2))
+        nu_hat_1 = self.nu.view(-1, self.m, self.k, self.nu.size(1))
         return torch.max(torch.median(nu_hat_1.abs(), 2)[0], 1)[0]/(1-self.epsilon)
 
 class L1_geometric(L1_Cauchy): 
