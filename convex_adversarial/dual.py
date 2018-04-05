@@ -46,19 +46,16 @@ def unbatch(A):
 
 def select_L(X, k, m, l1_eps, W, median=False, geometric=False, 
              **kwargs):
-    # if k is None or k*m > W.in_features: 
-    if False:
+    if k is None or k*m > W.in_features: 
         return L1_engine.L1(X, W, **kwargs)
     else: 
         if not isinstance(k, int): 
             raise ValueError('l1 must be an integer')
-
-        # if median: 
-        if True:
+        if median: 
             return L1_engine.L1_median(X, k, m, l1_eps, W, **kwargs)
 
         elif geometric: 
-            return L1_engine.geometric(X, k, m, l1_eps, W, **kwargs)
+            return L1_engine.L1_geometric(X, k, m, l1_eps, W, **kwargs)
         else:
             raise ValueError("Unknown L given the parameters")
 
@@ -112,7 +109,8 @@ class DualNetBounds:
         gamma = [self.biases[0]]
         nu_hat_x = self.affine[0](X)
 
-        L0 = select_L(X, l1_proj, m, l1_eps, self.affine[0])
+        L0 = select_L(X, l1_proj, m, l1_eps, self.affine[0], median=median,
+            geometric=geometric)
         l1 = L0.l1_norm()
         # eye = L.input(self.affine[0].in_features, **kwargs)
         # nu_hat_1 = self.affine[0](eye).unsqueeze(0)
