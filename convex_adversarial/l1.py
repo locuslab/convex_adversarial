@@ -56,11 +56,16 @@ class L1():
             self.I_ind = Variable(I.data.nonzero())
             self.nu = Variable(X.data.new(I.data.sum(), d.size(1)).zero_())
             self.nu.scatter_(1, self.I_ind[:,1,None], d[I][:,None])
+
+            if not scatter_grad:
+                self.nu = self.nu.detach()
+
             self.nu = W(self.nu)
             self.I = I
             self.zl = zl
             self.I_collapse = Variable(X.data.new(self.I_ind.size(0),X.size(0)).zero_())
             self.I_collapse.scatter_(1, self.I_ind[:,0][:,None], 1)
+
     
     def apply(self, W, d):
         if self.is_input: 
@@ -78,66 +83,7 @@ class L1():
 
     def l1_norm(self): 
         return self.nu.abs().sum(1)
-
-# class L1(Norm): 
-#     def __init__(self, X): 
-#         self.X = X
-#         self.I_collapse = []
-#         self.I_ind = []
-#         self.nu = []
-
-#     def input(self, in_features): 
-#         return Variable(torch.eye(in_features)).type_as(self.X)
-
-#     def add_layer(self, W, I, d, scatter_grad): 
-#         # indices of [example idx, origin crossing feature idx]
-#         self.I_ind.append(Variable(I[-1].data.nonzero()))
-#         subset_eye = Variable(self.X.data.new(I[-1].data.sum(), d.size(1)).zero_())
-#         subset_eye.scatter_(1, self.I_ind[-1][:,1,None], d[I[-1]][:,None])
-
-#         # create a matrix that collapses the minibatch of origin-crossing indices 
-#         # back to the sum of each minibatch
-#         self.I_collapse.append(Variable(self.X.data.new(self.I_ind[-1].size(0),self.X.size(0)).zero_()))
-#         self.I_collapse[-1].scatter_(1, self.I_ind[-1][:,0][:,None], 1)
-
-#         if not scatter_grad: 
-#             subset_eye = subset_eye.detach()
-
-#         self.nu.append(W(subset_eye))
-
-    # def skip(self): 
-    #     self.nu.append(None)         
-    #     self.I_collapse.append(None)
-    #     self.I_ind.append(None)
-
-
-    # def apply(self, W, d):
-    #     """ Scale all variables by d and pass through layer W """
-    #     for j in range(len(self.nu)): 
-    #         if self.nu[j] is not None: 
-    #             self.nu[j] = W(d[self.I_ind[j][:,0]] * self.nu[j])
-
-
-    # def l1_norm(self, nu_hat_1): 
-    #     return (nu_hat_1).abs().sum(1)
-
-    # def nu_zlu(self, zl, I):
-    #     return self.nu_zl(zl,I), self.nu_zu(zl,I)
-    #     # terms = [(zl[j][I[j]], self.nu[j].t().clamp(min=0))
-    #     #                         for j in range(len(zl)) if not self.nu[j] is None]
-    #     # nu_zl = sum((t0*(-t1)).mm(self.I_collapse[j]).t() for t0,t1 in terms)
-    #     # nu_zu = sum((t0*t1) for t0,t1 in terms)
-    #     # return nu_zl, nu_zu
-
-
-    # def nu_zl(self, zl, I):
-    #     return sum([(zl[j][I[j]] * (-self.nu[j].t()).clamp(min=0)).mm(self.I_collapse[j]).t()
-    #                             for j in range(len(zl)) if not self.nu[j] is None])
-
-    # def nu_zu(self, zl, I):
-    #     return sum([(zl[j][I[j]] * self.nu[j].t().clamp(min=0)).mm(self.I_collapse[j]).t()
-    #                             for j in range(len(zl)) if not self.nu[j] is None])
-
+        
 class L1_Cauchy(Norm): 
     def __init__(self, X, k, m, l1_eps, W, I=None, d=None, scatter_grad=None, zl=None): 
         kwargs = [I, d, scatter_grad]
