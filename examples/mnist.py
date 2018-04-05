@@ -1,7 +1,7 @@
 import waitGPU
 # import setGPU
 # waitGPU.wait(utilization=20, available_memory=10000, interval=60)
-waitGPU.wait(gpu_ids=[3])
+waitGPU.wait(gpu_ids=[1])
 
 import torch
 import torch.nn as nn

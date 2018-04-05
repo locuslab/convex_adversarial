@@ -44,6 +44,22 @@ def batch(A, n):
 def unbatch(A): 
     return A.view(-1, *A.size()[2:])
 
+def select_L(X, k, m, l1_eps, W, median=False, geometric=False, 
+             **kwargs):
+    if k is None or k*m > W.in_features: 
+        return L1_engine.L1(X, W, **kwargs)
+    else: 
+        if not isinstance(l1_proj, int): 
+            raise ValueError('l1 must be an integer')
+
+        if median: 
+            return L1_engine.L1_median(X, k, m, l1_eps, W, **kwargs)
+
+        elif geometric: 
+            return L1_engine.geometric(X, k, m, l1_eps, W, **kwargs)
+        else:
+            raise ValueError("Unknown L given the parameters")
+
 class DualNetBounds: 
     def __init__(self, net, X, epsilon, alpha_grad=False, scatter_grad=False, 
                  l1_proj=None, l1_eps=None, m=None, median=False,
@@ -70,34 +86,36 @@ class DualNetBounds:
         _ = X[0].view(1,-1)
         for a in self.affine: 
             _ = a(_)
-            
 
         # l1_median = None
         # l1_geometric = 100
-        if l1_proj is not None and median: 
-            if not isinstance(l1_proj, int): 
-                raise ValueError('l1 must be an integer')
-            L = L1_engine.L1_median(X, l1_proj, m, l1_eps)
-            kwargs = { }
-        elif l1_proj is not None and geometric: 
-            if not isinstance(l1_proj, int): 
-                raise ValueError('l1 must be an integer')
-            # should change this to only use projection if # of activations > k
-            L = L1_engine.L1_geometric(X, l1_proj, m, l1_eps)
-            kwargs = { } 
-        else: 
-            L = L1_engine.L1(X)
-            kwargs = {}
+        # if l1_proj is not None and median: 
+        #     if not isinstance(l1_proj, int): 
+        #         raise ValueError('l1 must be an integer')
+        #     L = L1_engine.L1_median(X, l1_proj, m, l1_eps)
+        #     kwargs = { }
+        # elif l1_proj is not None and geometric: 
+        #     if not isinstance(l1_proj, int): 
+        #         raise ValueError('l1 must be an integer')
+        #     # should change this to only use projection if # of activations > k
+        #     L = L1_engine.L1_geometric(X, l1_proj, m, l1_eps)
+        #     kwargs = { } 
+        # else: 
+        #     L = L1_engine.L1(X)
+        #     kwargs = {}
 
         self.biases = [full_bias(l, self.affine[i].out_features) 
                         for i,l in enumerate(self.layers)]
         
         gamma = [self.biases[0]]
         nu_hat_x = self.affine[0](X)
-        eye = L.input(self.affine[0].in_features, **kwargs)
-        nu_hat_1 = self.affine[0](eye).unsqueeze(0)
 
-        l1 = L.l1_norm(nu_hat_1)
+        L0 = select_L(X, l1_proj, m, l1_eps, self.affine[0])
+        l1 = L0.l1_norm()
+
+        # eye = L.input(self.affine[0].in_features, **kwargs)
+        # nu_hat_1 = self.affine[0](eye).unsqueeze(0)
+        # l1 = L.l1_norm(nu_hat_1)
         self.zl = [nu_hat_x + gamma[0] - epsilon*l1]
         self.zu = [nu_hat_x + gamma[0] + epsilon*l1]
 
@@ -108,7 +126,7 @@ class DualNetBounds:
         self.X = X
         self.epsilon = epsilon
         I_collapse = []
-        I_ind = []
+        Ls = []
 
         if l1_proj is not None: 
             kwargs['zl'] = self.zl
@@ -134,13 +152,24 @@ class DualNetBounds:
             if I_nonzero.data.sum() > 0:
                 d[I_nonzero] += self.zu[-1][I_nonzero]/(self.zu[-1][I_nonzero] - self.zl[-1][I_nonzero])
 
+            for L in Ls: 
+                if L is not None: 
+                    L.apply(self.affine[i+1], d)
+            if not self.I_empty[-1]: 
+                Ls.append(select_L(X, l1_proj, m, l1_eps, self.affine[i+1],
+                                   median=median, geometric=geometric,
+                                   I=self.I[-1], d=d,
+                                   scatter_grad=scatter_grad, zl=self.zl[-1]))
+            else: 
+                Ls.append(None)
+
             # initialize new terms
-            L.apply(self.affine[i+1], d)
-            if not self.I_empty[-1]:
-                L.add_layer(self.affine[i+1], self.I, d, 
-                                    scatter_grad, **kwargs)
-            else:
-                L.skip()
+            # L.apply(self.affine[i+1], d)
+            # if not self.I_empty[-1]:
+            #     L.add_layer(self.affine[i+1], self.I, d, 
+            #                         scatter_grad, **kwargs)
+            # else:
+            #     L.skip()
 
             gamma.append(self.biases[i+1])
             # propagate bias terms
@@ -148,14 +177,19 @@ class DualNetBounds:
                 gamma[j] = self.affine[i+1](d * gamma[j])
                 
             nu_hat_x = self.affine[i+1](d*nu_hat_x)
-            nu_hat_1 = batch(self.affine[i+1](unbatch(d.unsqueeze(1)*nu_hat_1)), n)
-            
-            l1 = L.l1_norm(nu_hat_1)
-            nu_zl, nu_zu = L.nu_zlu(self.zl, *args)
+            # nu_hat_1 = batch(self.affine[i+1](unbatch(d.unsqueeze(1)*nu_hat_1)), n)
+            # l1 = L0.l1_norm(nu_hat_1)
+            L0.apply(self.affine[i+1], d)
+            l1 = L0.l1_norm()
+
+            # nu_zl, nu_zu = L.nu_zlu(self.zl, *args)
+            nu_zls, nu_zus = zip(*[L.nu_zlu() for L in Ls])
 
             # compute bounds
-            self.zl.append(nu_hat_x + sum(gamma) - epsilon*l1 + nu_zl)
-            self.zu.append(nu_hat_x + sum(gamma) + epsilon*l1 - nu_zu)
+            # print(nu_hat_x.size(), sum(gamma).size(), l1.size(), sum
+            #     (nu_zl).size())
+            self.zl.append(nu_hat_x + sum(gamma) - epsilon*l1 + sum(nu_zls))
+            self.zu.append(nu_hat_x + sum(gamma) + epsilon*l1 - sum(nu_zus))
         
         self.s = [torch.zeros_like(u) for l,u in zip(self.zl, self.zu)]
 
