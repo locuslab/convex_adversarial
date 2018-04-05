@@ -112,12 +112,16 @@ class L1_Cauchy():
             self.nu = zl.unsqueeze(1)*self.nu
             self.nu_one = zl*self.nu_one
 
-            self.nu = W(unbatch(self.nu))
+            self.nu = batch(W(unbatch(self.nu)), self.X.size(0))
             self.nu_one = W(self.nu_one)
 
     def apply(self, W, d):
-        self.nu = W(unbatch(d.unsqueeze(1) * batch(self.nu, self.X.size(0))))
-        self.nu_one = W(d * self.nu_one)
+        n = self.X.size(0)
+        if self.is_input: 
+            self.nu = batch(W(unbatch(d.unsqueeze(1)*self.nu)), n)
+        else:
+            self.nu = batch(W(unbatch(d.unsqueeze(1) * self.nu)),n)
+            self.nu_one = W(d * self.nu_one)
 
 
     def nu_zlu(self): 
@@ -133,7 +137,7 @@ class L1_Cauchy():
 class L1_median(L1_Cauchy): 
     def l1_norm(self): 
         # return torch.median(nu_hat_1.abs(), 1)[0]/(1-self.epsilon)
-        nu_hat_1 = self.nu.view(-1, self.m, self.k, self.nu.size(1))
+        nu_hat_1 = self.nu.view(-1, self.m, self.k, self.nu.size(2))
         return torch.max(torch.median(nu_hat_1.abs(), 2)[0], 1)[0]/(1-self.epsilon)
 
 class L1_geometric(L1_Cauchy): 

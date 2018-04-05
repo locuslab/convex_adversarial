@@ -46,13 +46,15 @@ def unbatch(A):
 
 def select_L(X, k, m, l1_eps, W, median=False, geometric=False, 
              **kwargs):
-    if k is None or k*m > W.in_features: 
+    # if k is None or k*m > W.in_features: 
+    if False:
         return L1_engine.L1(X, W, **kwargs)
     else: 
         if not isinstance(k, int): 
             raise ValueError('l1 must be an integer')
 
-        if median: 
+        # if median: 
+        if True:
             return L1_engine.L1_median(X, k, m, l1_eps, W, **kwargs)
 
         elif geometric: 
