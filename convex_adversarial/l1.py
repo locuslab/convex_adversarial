@@ -51,7 +51,9 @@ class L1():
 
         self.is_input = all(kwarg is None for kwarg in kwargs)
         if self.is_input: 
-            self.nu = W(Variable(torch.eye(W.in_features)).type_as(self.X)).unsqueeze(0)
+            self.nu = self.X.data.new(W.in_features, W.in_features)
+            torch.eye(W.in_features, out=self.nu)
+            self.nu = W(Variable(self.nu)).unsqueeze(0)
         else:
             self.I_ind = Variable(I.data.nonzero())
             self.nu = Variable(X.data.new(I.data.sum(), d.size(1)).zero_())
@@ -72,9 +74,7 @@ class L1():
             n = self.X.size(0)
             self.nu = batch(W(unbatch(d.unsqueeze(1)*self.nu)), n)
         else:
-            # print(d[self.I_ind[:,0]].size(), self.nu.size())
             self.nu = W(d[self.I_ind[:,0]] * self.nu)
-        # self.nu = W(unbatch(d.unsqueeze(1) * batch(self.nu, self.X.size(0))))
 
     def nu_zlu(self): 
         nu_zl = (self.zl[self.I] * (-self.nu.t()).clamp(min=0)).mm(self.I_collapse).t()
@@ -100,12 +100,12 @@ class L1_Cauchy():
         self.W = W
 
         if self.is_input: 
-            self.nu = W(Variable(torch.zeros(self.k*self.m, W.in_features).cauchy_()).type_as(self.X)).unsqueeze(0)
-            # self.nu = W(Variable(X.data.new(k*m, W.in_features).cauchy_())).unsqueeze(0)
+            # self.nu = W(Variable(torch.zeros(self.k*self.m, W.in_features).cauchy_()).type_as(self.X)).unsqueeze(0)
+            self.nu = W(Variable(X.data.new(k*m, W.in_features).cauchy_())).unsqueeze(0)
             self.nu_one = None
         else:
-            self.nu = Variable(torch.zeros(1, self.k*self.m, d.size(1)).cauchy_()).type_as(self.X)
-            # self.nu = Variable(X.data.new(1, k*m, d.size(1)).cauchy_())
+            # self.nu = Variable(torch.zeros(1, self.k*self.m, d.size(1)).cauchy_()).type_as(self.X)
+            self.nu = Variable(X.data.new(1, k*m, d.size(1)).cauchy_())
             self.nu_one = Variable(X.data.new(1, d.size(1)).fill_(1))
 
             if  (~I.data).sum() > 0: 
