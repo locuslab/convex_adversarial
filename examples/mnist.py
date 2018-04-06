@@ -38,6 +38,8 @@ if __name__ == "__main__":
     parser.add_argument('--m', type=int, default=None)
     parser.add_argument('--large', action='store_true')
     parser.add_argument('--vgg', action='store_true')
+    parser.add_argument('--l1_train', default='exact')
+    parser.add_argument('--l1_test', default='exact')
     args = parser.parse_args()
 
     if args.prefix: 
@@ -46,18 +48,22 @@ if __name__ == "__main__":
         elif args.large: 
             args.prefix += '_large'
 
-        banned = ['alpha_grad', 'scatter_grad', 'verbose', 'prefix',
-                  'large', 'vgg']
-        for arg in sorted(vars(args)): 
-            if arg not in banned: 
-                args.prefix += '_' + arg + '_' +str(getattr(args, arg))
+        if args.eval: 
+            args.prefix += '_eval_' + args.eval.replace('/','_')
+        else:
+            banned = ['alpha_grad', 'scatter_grad', 'verbose', 'prefix',
+                      'large', 'vgg']
+            for arg in sorted(vars(args)): 
+                if arg not in banned and getattr(args,arg) is not None: 
+                    args.prefix += '_' + arg + '_' +str(getattr(args, arg))
     else: 
         args.prefix = 'mnist_temporary'
     print("saving file to {}".format(args.prefix))
     # args.prefix = args.prefix or 'mnist_conv_{:.4f}_{:.4f}_0'.format(args.epsilon, args.lr).replace(".","_")
     setproctitle.setproctitle(args.prefix)
 
-    train_log = open(args.prefix + "_train.log", "w")
+    if not args.eval:
+        train_log = open(args.prefix + "_train.log", "w")
     test_log = open(args.prefix + "_test.log", "w")
 
     train_loader, test_loader = pblm.mnist_loaders(args.batch_size)
@@ -113,9 +119,9 @@ over {} estimates, we have epsilon={}'''.format(args.delta, args.l1_proj,
                 else:
                     epsilon = args.epsilon
                 train_robust(train_loader, model, opt, epsilon, t, train_log, 
-                    args.verbose, **kwargs)
+                    args.verbose, l1_type=args.l1_train, **kwargs)
                 evaluate_robust(test_loader, model, args.epsilon, t, test_log,
-                   args.verbose, **kwargs)
+                   args.verbose, l1_type=args.l1_test, **kwargs)
                       # l1_geometric=args.l1_proj)
 
             torch.save(model.state_dict(), args.prefix + "_model.pth")

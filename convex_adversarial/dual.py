@@ -44,25 +44,25 @@ def batch(A, n):
 def unbatch(A): 
     return A.view(-1, *A.size()[2:])
 
-def select_L(X, k, m, l1_eps, W, median=False, geometric=False, 
+def select_L(X, k, m, l1_eps, W, l1_type='exact', 
              **kwargs):
-    if k is None or k*m > W.in_features: 
+    if l1_type is 'exact' or k*m > W.in_features: 
         return L1_engine.L1(X, W, **kwargs)
     else: 
         if not isinstance(k, int): 
             raise ValueError('l1 must be an integer')
-        if median: 
+        if l1_type is 'median': 
             return L1_engine.L1_median(X, k, m, l1_eps, W, **kwargs)
 
-        elif geometric: 
+        elif l1_type is 'geometric': 
             return L1_engine.L1_geometric(X, k, m, l1_eps, W, **kwargs)
         else:
-            raise ValueError("Unknown L given the parameters")
+            raise ValueError("Unknown l1_type: {}".format(l1_type))
 
 class DualNetBounds: 
     def __init__(self, net, X, epsilon, alpha_grad=False, scatter_grad=False, 
-                 l1_proj=None, l1_eps=None, m=None, median=False,
-                 geometric=False):
+                 l1_proj=None, l1_eps=None, m=None, 
+                 l1_type='exact'):
         """ 
         net : ReLU network
         X : minibatch of examples
@@ -109,8 +109,7 @@ class DualNetBounds:
         gamma = [self.biases[0]]
         nu_hat_x = self.affine[0](X)
 
-        L0 = select_L(X, l1_proj, m, l1_eps, self.affine[0], median=median,
-            geometric=geometric)
+        L0 = select_L(X, l1_proj, m, l1_eps, self.affine[0], l1_type=l1_type)
         l1 = L0.l1_norm()
         # eye = L.input(self.affine[0].in_features, **kwargs)
         # nu_hat_1 = self.affine[0](eye).unsqueeze(0)
@@ -150,7 +149,7 @@ class DualNetBounds:
                     L.apply(self.affine[i+1], d)
             if not self.I_empty[-1]: 
                 Ls.append(select_L(X, l1_proj, m, l1_eps, self.affine[i+1],
-                                   median=median, geometric=geometric,
+                                   l1_type=l1_type,
                                    I=self.I[-1], d=d,
                                    scatter_grad=scatter_grad, zl=self.zl[-1]))
             else: 

@@ -173,9 +173,10 @@ def epsilon_from_model(model, X, k, delta, m):
         if isinstance(l, (nn.Linear, nn.Conv2d)): 
             out_features.append(X.numel())
 
-    num_est = sum(n for n in out_features[:-1])
+    num_est = sum(n for n in out_features[:-1] if k*m < n)
 
-    num_est += sum(n*i for i,n in enumerate(out_features[:-1]))
+    num_est += sum(n*i for i,n in enumerate(out_features[:-1]) if k*m < n)
+    print(num_est)
 
     sub_delta = (delta/num_est)**(1/m)
     l1_eps = get_epsilon(sub_delta, k)

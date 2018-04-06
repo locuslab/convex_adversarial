@@ -11,6 +11,8 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
     if epoch == 0:
         blank_state = opt.state_dict()
 
+
+
     for i, (X,y) in enumerate(loader):
         X,y = X.cuda(), y.cuda().long()
         if y.dim() == 2: 
@@ -18,7 +20,7 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
 
         robust_ce, robust_err = robust_loss(model, epsilon, 
                                              Variable(X), Variable(y), 
-                                             **kwargs, median=True)
+                                             **kwargs)
 
         out = model(Variable(X))
         ce = nn.CrossEntropyLoss()(out, Variable(y))
@@ -49,7 +51,7 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose, **kwargs):
         robust_ce, robust_err = robust_loss(model, epsilon, 
                                             Variable(X, volatile=True), 
                                             Variable(y, volatile=True),
-                                             **kwargs, geometric=True)
+                                             **kwargs)
         out = model(Variable(X))
         ce = nn.CrossEntropyLoss()(out, Variable(y))
         err = (out.data.max(1)[1] != y).float().sum()  / X.size(0)
