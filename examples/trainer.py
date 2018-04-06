@@ -38,7 +38,7 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
         log.flush()
 
         del X, y, robust_ce, out, ce
-        torch.cuda.empty_cache()
+    torch.cuda.empty_cache()
 
 
 def evaluate_robust(loader, model, epsilon, epoch, log, verbose, **kwargs):
@@ -62,7 +62,7 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose, **kwargs):
         log.flush()
 
         del X, y, robust_ce, out, ce
-        torch.cuda.empty_cache()
+    torch.cuda.empty_cache()
 
 def train_baseline(loader, model, opt, epoch, log, verbose):
     model.train()
