@@ -164,8 +164,12 @@ def p_lower(epsilon, k):
 
 import time
 def epsilon_from_model(model, X, k, delta, m): 
-    if k is None or delta is None or m is None: 
-        raise ValueError("k, delta, and m must not be None. ")
+    if k is None or m is None: 
+        raise ValueError("k and m must not be None. ")
+    if delta is None: 
+        print('No delta specified, not using probabilistic bounds.')
+        return 0
+        
     X = X[0].unsqueeze(0)
     out_features = []
     for l in model: 
@@ -181,6 +185,8 @@ def epsilon_from_model(model, X, k, delta, m):
     sub_delta = (delta/num_est)**(1/m)
     l1_eps = get_epsilon(sub_delta, k)
 
+    if num_est == 0: 
+        return 0
     if l1_eps > 1: 
         raise ValueError('Delta too large / k too small to get probabilistic bound')
     return l1_eps

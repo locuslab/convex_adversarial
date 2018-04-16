@@ -44,17 +44,20 @@ def batch(A, n):
 def unbatch(A): 
     return A.view(-1, *A.size()[2:])
 
-def select_L(X, k, m, l1_eps, W, l1_type='exact', 
+def select_L(X, k, m, l1_eps, W, l1_type='exact', threshold=None,
              **kwargs):
-    if l1_type is 'exact' or k*m > W.in_features: 
+    if l1_type == 'exact' or k*m > threshold: 
+        # print("exact at threshold {}".format(threshold))
         return L1_engine.L1(X, W, **kwargs)
     else: 
+        # print("approximate at threshold {}".format(threshold))
         if not isinstance(k, int): 
             raise ValueError('l1 must be an integer')
-        if l1_type is 'median': 
+
+        if l1_type == 'median': 
             return L1_engine.L1_median(X, k, m, l1_eps, W, **kwargs)
 
-        elif l1_type is 'geometric': 
+        elif l1_type == 'geometric': 
             return L1_engine.L1_geometric(X, k, m, l1_eps, W, **kwargs)
         else:
             raise ValueError("Unknown l1_type: {}".format(l1_type))
@@ -109,7 +112,8 @@ class DualNetBounds:
         gamma = [self.biases[0]]
         nu_hat_x = self.affine[0](X)
 
-        L0 = select_L(X, l1_proj, m, l1_eps, self.affine[0], l1_type=l1_type)
+        L0 = select_L(X, l1_proj, m, l1_eps, self.affine[0], l1_type=l1_type,
+                      threshold=self.affine[0].in_features)
         l1 = L0.l1_norm()
         # eye = L.input(self.affine[0].in_features, **kwargs)
         # nu_hat_1 = self.affine[0](eye).unsqueeze(0)
@@ -150,6 +154,7 @@ class DualNetBounds:
             if not self.I_empty[-1]: 
                 Ls.append(select_L(X, l1_proj, m, l1_eps, self.affine[i+1],
                                    l1_type=l1_type,
+                                   threshold=self.I[-1].data.sum()/X.size(0),
                                    I=self.I[-1], d=d,
                                    scatter_grad=scatter_grad, zl=self.zl[-1]))
             else: 
