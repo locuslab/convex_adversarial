@@ -43,7 +43,7 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
 
 def evaluate_robust(loader, model, epsilon, epoch, log, verbose, **kwargs):
     model.eval()
-
+    all_robust_err = []
     for i, (X,y) in enumerate(loader):
         X,y = X.cuda(), y.cuda().long()
         if y.dim() == 2: 
@@ -61,8 +61,10 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose, **kwargs):
             print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err)
         log.flush()
 
+        all_robust_err.append(robust_err)
         del X, y, robust_ce, out, ce
     torch.cuda.empty_cache()
+    print(sum(all_robust_err)/len(all_robust_err))
 
 def train_baseline(loader, model, opt, epoch, log, verbose):
     model.train()

@@ -1,7 +1,7 @@
 import waitGPU
-# import setGPU
+import setGPU
 # waitGPU.wait(utilization=20, available_memory=10000, interval=60)
-waitGPU.wait(gpu_ids=[1])
+# waitGPU.wait(gpu_ids=[1,3], utilization=20, available_memory=10000, interval=60)
 
 import torch
 import torch.nn as nn
@@ -13,53 +13,13 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 
 import setproctitle
-import argparse
 
 import problems as pblm
 from trainer import *
-from convex_adversarial import epsilon_from_model
 
 if __name__ == "__main__": 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--batch_size', type=int, default=50)
-    parser.add_argument('--epochs', type=int, default=20)
-    parser.add_argument('--seed', type=int, default=0)
-    parser.add_argument('--verbose', type=int, default=1)
-    parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--epsilon", type=float, default=0.1)
-    parser.add_argument("--starting_epsilon", type=float, default=0.05)
-    parser.add_argument('--prefix')
-    parser.add_argument('--eval')
-    parser.add_argument('--baseline', action='store_true')
-    parser.add_argument('--alpha_grad', action='store_true')
-    parser.add_argument('--scatter_grad', action='store_true')
-    parser.add_argument('--l1_proj', type=int, default=None)
-    parser.add_argument('--delta', type=float, default=None)
-    parser.add_argument('--m', type=int, default=None)
-    parser.add_argument('--large', action='store_true')
-    parser.add_argument('--vgg', action='store_true')
-    parser.add_argument('--l1_train', default='exact')
-    parser.add_argument('--l1_test', default='exact')
-    args = parser.parse_args()
-
-    if args.prefix: 
-        if args.vgg: 
-            args.prefix += '_vgg'
-        elif args.large: 
-            args.prefix += '_large'
-
-        if args.eval: 
-            args.prefix += '_eval_' + args.eval.replace('/','_')
-        else:
-            banned = ['alpha_grad', 'scatter_grad', 'verbose', 'prefix',
-                      'large', 'vgg']
-            for arg in sorted(vars(args)): 
-                if arg not in banned and getattr(args,arg) is not None: 
-                    args.prefix += '_' + arg + '_' +str(getattr(args, arg))
-    else: 
-        args.prefix = 'mnist_temporary'
+    args = pblm.argparser()
     print("saving file to {}".format(args.prefix))
-    # args.prefix = args.prefix or 'mnist_conv_{:.4f}_{:.4f}_0'.format(args.epsilon, args.lr).replace(".","_")
     setproctitle.setproctitle(args.prefix)
 
     if not args.eval:
@@ -67,6 +27,9 @@ if __name__ == "__main__":
     test_log = open(args.prefix + "_test.log", "w")
 
     train_loader, test_loader = pblm.mnist_loaders(args.batch_size)
+    if args.vgg: 
+        _, test_loader = pblm.mnist_loaders(1, shuffle_test=True)
+        test_loader = [tl for i,tl in enumerate(test_loader) if i < 200]
 
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
@@ -76,28 +39,9 @@ if __name__ == "__main__":
         model = pblm.mnist_model_large().cuda()
     else: 
         model = pblm.mnist_model().cuda() 
+        #model.load_state_dict(torch.load('l1_truth/mnist_nonexact_rerun_baseline_False_batch_size_50_delta_0.01_epochs_20_epsilon_0.1_l1_proj_200_l1_test_exact_l1_train_median_lr_0.001_m_10_seed_0_starting_epsilon_0.05_model.pth'))
 
-    if args.l1_proj is not None: 
-        for X,y in train_loader: 
-            break
-        l1_eps = epsilon_from_model(model, Variable(X.cuda()), args.l1_proj,
-                                    args.delta, args.m)
-        print('''
-With probability {} and projection into {} dimensions and a max
-over {} estimates, we have epsilon={}'''.format(args.delta, args.l1_proj,
-                                                args.m, l1_eps))
-        kwargs = {
-            'alpha_grad' : args.alpha_grad,
-            'scatter_grad' : args.scatter_grad, 
-            'l1_proj' : args.l1_proj, 
-            'l1_eps' : l1_eps, 
-            'm' : args.m
-        }
-    else:
-        kwargs = {
-            'alpha_grad' : args.alpha_grad,
-            'scatter_grad' : args.scatter_grad, 
-        }
+    kwargs = pblm.args2kwargs(args)
 
     if args.eval is not None: 
         try: 
@@ -109,13 +53,17 @@ over {} estimates, we have epsilon={}'''.format(args.delta, args.l1_proj,
               **kwargs)
     else: 
         opt = optim.Adam(model.parameters(), lr=args.lr)
+        eps_schedule = np.logspace(np.log10(args.starting_epsilon), 
+                                   np.log10(args.epsilon), 
+                                   args.epochs//2)
         for t in range(args.epochs):
             if args.baseline: 
                 train_baseline(train_loader, model, opt, t, train_log, args.verbose)
                 evaluate_baseline(test_loader, model, t, test_log, args.verbose)
             else:
-                if t <= args.epochs//2 and args.starting_epsilon is not None: 
-                    epsilon = args.starting_epsilon + (t/(args.epochs//2))*(args.epsilon - args.starting_epsilon)
+                if t < args.epochs//2 and args.starting_epsilon is not None: 
+                    # epsilon = args.starting_epsilon + (t/(args.epochs//2))*(args.epsilon - args.starting_epsilon)
+                    epsilon = float(eps_schedule[t])
                 else:
                     epsilon = args.epsilon
                 train_robust(train_loader, model, opt, epsilon, t, train_log, 
