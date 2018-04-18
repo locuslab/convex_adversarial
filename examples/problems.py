@@ -142,6 +142,60 @@ def har_500_250_100_model():
     )
     return model
 
+def cifar_loaders(batch_size): 
+    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225])
+
+    train = datasets.CIFAR10('.', train=True, download=True, 
+        transform=transforms.Compose([transforms.ToTensor(), normalize]))
+    test = datasets.CIFAR10('.', train=False, download=True, 
+        transform=transforms.Compose([transforms.ToTensor(), normalize]))
+    train_loader = torch.utils.data.DataLoader(train, batch_size=batch_size, shuffle=True, pin_memory=False)
+    test_loader = torch.utils.data.DataLoader(test, batch_size=batch_size, shuffle=False, pin_memory=False)
+    return train_loader, test_loader
+
+def cifar_model(): 
+    model = nn.Sequential(
+        nn.Conv2d(3, 16, 4, stride=2, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(16, 32, 4, stride=2, padding=1),
+        nn.ReLU(),
+        Flatten(),
+        nn.Linear(32*8*8,100),
+        nn.ReLU(),
+        nn.Linear(100, 10)
+    )
+    return model
+
+def cifar_model_vgg(): 
+    model = nn.Sequential(
+        nn.Conv2d(3, 64, 3, stride=2, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(64, 128, 3, stride=2, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(128, 256, 3, stride=1, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(256, 256, 3, stride=2, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(256, 512, 3, stride=1, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(512, 512, 3, stride=2, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(512, 512, 3, stride=1, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(512, 512, 3, stride=2, padding=1),
+        nn.ReLU(),
+        Flatten(),
+        nn.Linear(512*1*1,512),
+        nn.ReLU(),
+        nn.Linear(512,512),
+        nn.ReLU(),
+        nn.Linear(512,512),
+        nn.ReLU(),
+        nn.Linear(512,10)
+    )
+    return model
+
 
 def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3, 
               epsilon=0.1, starting_epsilon=0.05, 

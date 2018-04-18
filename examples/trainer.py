@@ -17,10 +17,13 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
         X,y = X.cuda(), y.cuda().long()
         if y.dim() == 2: 
             y = y.squeeze(1)
-
+        import time
+        start_time = time.time()
         robust_ce, robust_err = robust_loss(model, epsilon, 
                                              Variable(X), Variable(y), 
                                              **kwargs)
+        print(time.time()-start_time)
+        assert False
 
         out = model(Variable(X))
         ce = nn.CrossEntropyLoss()(out, Variable(y))
@@ -33,7 +36,7 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
 
         print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err, file=log)
 
-        if i % verbose == 0: 
+        if verbose and i % verbose == 0: 
             print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err)
         log.flush()
 
@@ -57,14 +60,14 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose, **kwargs):
         err = (out.data.max(1)[1] != y).float().sum()  / X.size(0)
 
         print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err, file=log)
-        if i % verbose == 0: 
+        if verbose and i % verbose == 0: 
             print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err)
         log.flush()
 
         all_robust_err.append(robust_err)
         del X, y, robust_ce, out, ce
     torch.cuda.empty_cache()
-    print(sum(all_robust_err)/len(all_robust_err))
+    return (sum(all_robust_err)/len(all_robust_err))
 
 def train_baseline(loader, model, opt, epoch, log, verbose):
     model.train()
@@ -82,19 +85,22 @@ def train_baseline(loader, model, opt, epoch, log, verbose):
         opt.step()
 
         print(epoch, i, ce.data[0], err, file=log)
-        if i % verbose == 0: 
+        if verbose and i % verbose == 0: 
             print(epoch, i, ce.data[0], err)
         log.flush()
 
 def evaluate_baseline(loader, model, epoch, log, verbose):
     model.eval()
+    all_err = []
     for i, (X,y) in enumerate(loader):
         X,y = X.cuda(), y.cuda()
         out = model(Variable(X))
         ce = nn.CrossEntropyLoss()(out, Variable(y))
         err = (out.data.max(1)[1] != y).float().sum()  / X.size(0)
 
+        all_err.append(err)
         print(epoch, i, ce.data[0], err, file=log)
-        if i % verbose == 0: 
+        if verbose and i % verbose == 0: 
             print(epoch, i, ce.data[0], err)
         log.flush()
+    return (sum(all_err)/len(all_err))
