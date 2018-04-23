@@ -180,7 +180,10 @@ class DualNetBounds:
             l1 = L0.l1_norm()
 
             # nu_zl, nu_zu = L.nu_zlu(self.zl, *args)
-            nu_zls, nu_zus = zip(*[L.nu_zlu() for L in Ls if L is not None])
+            if not all(L is None for L in Ls): 
+                nu_zls, nu_zus = zip(*[L.nu_zlu() for L in Ls if L is not None])
+            else:
+                nu_zls, nu_zus = [],[]
 
             # compute bounds
             # print(nu_hat_x.size(), sum(gamma).size(), l1.size(), sum(nu_zls).size())
