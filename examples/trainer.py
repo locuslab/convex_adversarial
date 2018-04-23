@@ -4,6 +4,7 @@ from torch.autograd import Variable
 from convex_adversarial import robust_loss
 
 import numpy as np
+import time
 
 def train_robust(loader, model, opt, epsilon, epoch, log, verbose, 
                  **kwargs):
@@ -17,13 +18,9 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
         X,y = X.cuda(), y.cuda().long()
         if y.dim() == 2: 
             y = y.squeeze(1)
-        import time
-        start_time = time.time()
         robust_ce, robust_err = robust_loss(model, epsilon, 
                                              Variable(X), Variable(y), 
                                              **kwargs)
-        print(time.time()-start_time)
-        assert False
 
         out = model(Variable(X))
         ce = nn.CrossEntropyLoss()(out, Variable(y))
@@ -71,11 +68,16 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose, **kwargs):
 
 def train_baseline(loader, model, opt, epoch, log, verbose):
     model.train()
-    if epoch == 0:
-        blank_state = opt.state_dict()
+    batch_time = AverageMeter()
+    data_time = AverageMeter()
+    losses = AverageMeter()
+    errors = AverageMeter()
 
+    end = time.time()
     for i, (X,y) in enumerate(loader):
         X,y = X.cuda(), y.cuda()
+        data_time.update(time.time() - end)
+
         out = model(Variable(X))
         ce = nn.CrossEntropyLoss()(out, Variable(y))
         err = (out.data.max(1)[1] != y).float().sum()  / X.size(0)
@@ -84,9 +86,20 @@ def train_baseline(loader, model, opt, epoch, log, verbose):
         ce.backward()
         opt.step()
 
+        batch_time.update(time.time()-end)
+        end = time.time()
+        losses.update(ce.data[0], X.size(0))
+        errors.update(err, X.size(0))
+
         print(epoch, i, ce.data[0], err, file=log)
         if verbose and i % verbose == 0: 
-            print(epoch, i, ce.data[0], err)
+            print('Epoch: [{0}][{1}/{2}]\t'
+                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                  'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
+                  'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
+                  'Error {errors.val:.3f} ({errors.avg:.3f})'.format(
+                   epoch, i, len(loader), batch_time=batch_time,
+                   data_time=data_time, loss=losses, errors=errors))
         log.flush()
 
 def evaluate_baseline(loader, model, epoch, log, verbose):
@@ -104,3 +117,22 @@ def evaluate_baseline(loader, model, epoch, log, verbose):
             print(epoch, i, ce.data[0], err)
         log.flush()
     return (sum(all_err)/len(all_err))
+
+
+class AverageMeter(object):
+    """Computes and stores the average and current value"""
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
+
