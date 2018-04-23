@@ -329,18 +329,20 @@ def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3,
 
     return args
 
-def args2kwargs(args): 
+def args2kwargs(args, X=None): 
 
     if args.l1_proj is not None: 
-        for X,y in train_loader: 
-            break
         if not args.l1_eps:
-            args.l1_eps = epsilon_from_model(model, Variable(X.cuda()), args.l1_proj,
-                                        args.delta, args.m)
-            print('''
-    With probability {} and projection into {} dimensions and a max
-    over {} estimates, we have epsilon={}'''.format(args.delta, args.l1_proj,
-                                                    args.m, args.l1_eps))
+            if args.delta: 
+                args.l1_eps = epsilon_from_model(model, Variable(X.cuda()), args.l1_proj,
+                                            args.delta, args.m)
+                print('''
+        With probability {} and projection into {} dimensions and a max
+        over {} estimates, we have epsilon={}'''.format(args.delta, args.l1_proj,
+                                                        args.m, args.l1_eps))
+            else: 
+                args.l1_eps = 0
+                print('No epsilon or \delta specified, using epsilon=0.')
         else:
             print('Specified l1_epsilon={}'.format(args.l1_eps))
         kwargs = {
