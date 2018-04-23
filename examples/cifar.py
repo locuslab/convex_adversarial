@@ -1,4 +1,4 @@
-# import setGPU
+import setGPU
 # waitGPU.wait(utilization=20, available_memory=10000, interval=60)
 # waitGPU.wait(gpu_ids=[1,3], utilization=20, available_memory=10000, interval=60)
 
@@ -7,6 +7,8 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.autograd import Variable
+import torch.backends.cudnn as cudnn
+cudnn.benchmark = True
 
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
@@ -32,22 +34,23 @@ if __name__ == "__main__":
 
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
+
+
     if args.vgg: 
         # raise ValueError
         model = pblm.cifar_model_vgg().cuda()
-    elif args.large: 
-        raise ValueError
+    elif args.resnet: 
+        model = pblm.cifar_model_resnet().cuda()
         #model = pblm.mnist_model_large().cuda()
     else: 
         model = pblm.cifar_model().cuda() 
         #model.load_state_dict(torch.load('l1_truth/mnist_nonexact_rerun_baseline_False_batch_size_50_delta_0.01_epochs_20_epsilon_0.1_l1_proj_200_l1_test_exact_l1_train_median_lr_0.001_m_10_seed_0_starting_epsilon_0.05_model.pth'))
 
-    # for X,y in train_loader: 
-    #     X = Variable(X.cuda())
-    #     break
-    # print(X.max(), X.min())
-    # print(model(X).size())
-    # assert False
+    starting_epoch=0
+    if args.resume: 
+        checkpoint = torch.load(args.prefix + '_checkpoint.pth')
+        model.load_state_dict(checkpoint['state_dict'])
+        starting_epoch = checkpoint['epoch']+1
 
     kwargs = pblm.args2kwargs(args)
     best_err = 1
@@ -62,13 +65,15 @@ if __name__ == "__main__":
             args.verbose, 
               **kwargs)
     else: 
-        opt = optim.Adam(model.parameters(), lr=args.lr)
+        # opt = optim.Adam(model.parameters(), lr=args.lr)
+        opt = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum,
+            weight_decay=args.weight_decay)
+        lr_scheduler = optim.lr_scheduler.StepLR(opt, step_size=30, gamma=0.5)
         eps_schedule = np.logspace(np.log10(args.starting_epsilon), 
                                    np.log10(args.epsilon), 
                                    args.epochs//2)
-        for t in range(args.epochs):
-            if t > 0 and t % 30 == 0: 
-                args.lr /= 2
+        for t in range(starting_epoch, args.epochs):
+            lr_scheduler.step(epoch=t)
             if args.baseline: 
                 train_baseline(train_loader, model, opt, t, train_log, args.verbose)
                 err = evaluate_baseline(test_loader, model, t, test_log, args.verbose)
@@ -82,7 +87,7 @@ if __name__ == "__main__":
                     args.verbose, l1_type=args.l1_train, **kwargs)
                 err = evaluate_robust(test_loader, model, args.epsilon, t, test_log,
                    args.verbose, l1_type=args.l1_test, **kwargs)
-                      # l1_geometric=args.l1_proj)
+            print('Epoch {}: {} err'.format(t, err))
             
             if err < best_err: 
                 best_state_dict = model.state_dict()
