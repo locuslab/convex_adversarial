@@ -33,6 +33,8 @@ RUN echo cd >> $HOME/.bashrc
 
 ENV PYTHONPATH /home/:$PATH
 ENV CUDA_DEVICE_ORDER PCI_BUS_ID
+ENV LANG C.UTF-8 
+ENV LC_ALL C.UTF-8
 
 # MNIST data
 COPY . /home/
