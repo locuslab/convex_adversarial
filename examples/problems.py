@@ -13,11 +13,12 @@ import math
 
 def init_scale(model, X, epsilon): 
     dual = DualNetBounds(model, X, epsilon)
+    print("Scaling down weights...")
     for i in range(1, len(dual.affine)):
         d0 = (dual.zu[0] - dual.zl[0]).mean().data
         di = (dual.zu[i]-dual.zl[i]).mean().data
         while di[0] > d0[0]: 
-            print("scaling by 0.5, ", i)
+            # print("scaling by 0.5, ", i)
             dual.affine[i].l.weight.data *= 0.5
             del dual
             dual = DualNetBounds(model, X, epsilon)
@@ -32,8 +33,8 @@ class Flatten(nn.Module):
 def mnist_loaders(batch_size, shuffle_test=False): 
     mnist_train = datasets.MNIST(".", train=True, download=True, transform=transforms.ToTensor())
     mnist_test = datasets.MNIST(".", train=False, download=True, transform=transforms.ToTensor())
-    train_loader = torch.utils.data.DataLoader(mnist_train, batch_size=batch_size, shuffle=True, pin_memory=False)
-    test_loader = torch.utils.data.DataLoader(mnist_test, batch_size=batch_size, shuffle=shuffle_test, pin_memory=False)
+    train_loader = torch.utils.data.DataLoader(mnist_train, batch_size=batch_size, shuffle=True, pin_memory=True)
+    test_loader = torch.utils.data.DataLoader(mnist_test, batch_size=batch_size, shuffle=shuffle_test, pin_memory=True)
     return train_loader, test_loader
 
 def fashion_mnist_loaders(batch_size): 
@@ -41,8 +42,8 @@ def fashion_mnist_loaders(batch_size):
        download=True, transform=transforms.ToTensor())
     mnist_test = datasets.MNIST("./fashion_mnist", train=False,
        download=True, transform=transforms.ToTensor())
-    train_loader = torch.utils.data.DataLoader(mnist_train, batch_size=batch_size, shuffle=True, pin_memory=False)
-    test_loader = torch.utils.data.DataLoader(mnist_test, batch_size=batch_size, shuffle=False, pin_memory=False)
+    train_loader = torch.utils.data.DataLoader(mnist_train, batch_size=batch_size, shuffle=True, pin_memory=True)
+    test_loader = torch.utils.data.DataLoader(mnist_test, batch_size=batch_size, shuffle=False, pin_memory=True)
     return train_loader, test_loader
 
 def mnist_model(): 
@@ -53,6 +54,24 @@ def mnist_model():
         nn.ReLU(),
         Flatten(),
         nn.Linear(32*7*7,100),
+        nn.ReLU(),
+        nn.Linear(100, 10)
+    )
+    # for m in model.modules():
+    #     if isinstance(m, nn.Conv2d):
+    #         n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+    #         m.weight.data.normal_(0, math.sqrt(2. / n))
+    #         m.bias.data.zero_()
+    return model
+
+def mnist_model_double(): 
+    model = nn.Sequential(
+        nn.Conv2d(1, 32, 4, stride=2, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(32, 64, 4, stride=2, padding=1),
+        nn.ReLU(),
+        Flatten(),
+        nn.Linear(64*7*7,100),
         nn.ReLU(),
         nn.Linear(100, 10)
     )
@@ -106,8 +125,8 @@ def replace_10_with_0(y):
 def svhn_loaders(batch_size): 
     train = datasets.SVHN(".", split='train', download=True, transform=transforms.ToTensor(), target_transform=replace_10_with_0)
     test = datasets.SVHN(".", split='test', download=True, transform=transforms.ToTensor(), target_transform=replace_10_with_0)
-    train_loader = torch.utils.data.DataLoader(train, batch_size=batch_size, shuffle=True, pin_memory=False)
-    test_loader = torch.utils.data.DataLoader(test, batch_size=batch_size, shuffle=False, pin_memory=False)
+    train_loader = torch.utils.data.DataLoader(train, batch_size=batch_size, shuffle=True, pin_memory=True)
+    test_loader = torch.utils.data.DataLoader(test, batch_size=batch_size, shuffle=False, pin_memory=True)
     return train_loader, test_loader
 
 def svhn_model(): 
@@ -132,8 +151,8 @@ def har_loaders(batch_size):
     har_train = td.TensorDataset(X_tr, y_tr)
     har_test = td.TensorDataset(X_te, y_te)
 
-    train_loader = torch.utils.data.DataLoader(har_train, batch_size=batch_size, shuffle=True, pin_memory=False)
-    test_loader = torch.utils.data.DataLoader(har_test, batch_size=batch_size, shuffle=False, pin_memory=False)
+    train_loader = torch.utils.data.DataLoader(har_train, batch_size=batch_size, shuffle=True, pin_memory=True)
+    test_loader = torch.utils.data.DataLoader(har_test, batch_size=batch_size, shuffle=False, pin_memory=True)
     return train_loader, test_loader
 
 def har_500_model(): 
@@ -310,22 +329,27 @@ def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3,
             args.prefix += '_large'
         elif args.resnet: 
             args.prefix += '_resnet'
-        else:
-            raise ValueError("unknown model type")
+
+        if args.baseline: 
+            args.prefix += '_baseline'
 
         if args.eval: 
             args.prefix += '_eval_' + args.eval.replace('/','_')
         else:
             banned = ['alpha_grad', 'scatter_grad', 'verbose', 'prefix',
-                      'resume',
+                      'resume', 'baseline', 'eval', 
                       'large', 'vgg', 'resnet']
             if args.baseline:
                 banned += ['epsilon', 'starting_epsilon', 'l1_test', 'l1_train', 'm', 'l1_proj']
+            if args.opt == 'adam': 
+                banned += ['momentum', 'weight_decay']
+            if args.m == 1: 
+                banned += 'm'
             for arg in sorted(vars(args)): 
                 if arg not in banned and getattr(args,arg) is not None: 
                     args.prefix += '_' + arg + '_' +str(getattr(args, arg))
     else: 
-        args.prefix = 'mnist_temporary'
+        args.prefix = 'temporary'
 
     return args
 
