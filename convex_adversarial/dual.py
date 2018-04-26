@@ -8,36 +8,7 @@ import numpy as np
 
 from . import affine as Aff
 from . import l1 as L1_engine
-
-def AffineTranspose(l): 
-    if isinstance(l, nn.Linear): 
-        return Aff.AffineTransposeLinear(l)
-    elif isinstance(l, nn.Conv2d): 
-        return Aff.AffineTransposeConv2d(l)
-    else:
-        raise ValueError("AffineTranspose class not found for given layer.")
-
-def Affine(l): 
-    if isinstance(l, nn.Linear): 
-        return Aff.AffineLinear(l)
-    elif isinstance(l, nn.Conv2d): 
-        return Aff.AffineConv2d(l)
-    else:
-        raise ValueError("Affine class not found for given layer.")
-
-def full_bias(l, n=None): 
-    # expands the bias to the proper size. For convolutional layers, a full
-    # output dimension of n must be specified. 
-    if isinstance(l, nn.Linear): 
-        return l.bias.view(1,-1)
-    elif isinstance(l, nn.Conv2d): 
-        if n is None: 
-            raise ValueError("Need to pass n=<output dimension>")
-        b = l.bias.unsqueeze(1).unsqueeze(2)
-        k = int((n/(b.numel()))**0.5)
-        return b.expand(b.numel(),k,k).contiguous().view(1,-1)
-    else:
-        raise ValueError("Full bias can't be formed for given layer.")
+from .dense import Dense
 
 def batch(A, n): 
     return A.view(n, -1, *A.size()[1:])
@@ -62,6 +33,20 @@ def select_L(X, k, m, l1_eps, W, l1_type='exact', threshold=None,
         else:
             raise ValueError("Unknown l1_type: {}".format(l1_type))
 
+class ForwardPass: 
+    def __init__(self, X=None): 
+        if X is not None: 
+            self.inputs = [X]
+        else:
+            self.inputs = []
+    def apply(self, W): 
+        return W(*self.inputs)
+    def add(self, X): 
+        self.inputs.append(X)
+    def add_and_apply(self, X, W): 
+        self.add(X)
+        return self.apply(W)
+
 class DualNetBounds: 
     def __init__(self, net, X, epsilon, alpha_grad=False, scatter_grad=False, 
                  l1_proj=None, l1_eps=None, m=None, 
@@ -78,46 +63,32 @@ class DualNetBounds:
         """
 
         n = X.size(0)
-        self.layers = [l for l in net if isinstance(l, (nn.Linear, nn.Conv2d))]
-        self.affine_transpose = [AffineTranspose(l) for l in self.layers]
-        self.affine = [Affine(l) for l in self.layers]
+        self.layers = [l for l in net if isinstance(l, (nn.Linear, nn.Conv2d, Dense))]
+
+        # self.affine_transpose = [Aff.toAffineTranspose(l) for l in self.layers]
+        self.affine_transpose = Aff.transpose_all(self.layers)
+        self.affine = [Aff.toAffine(l) for l in self.layers]
 
         self.k = len(self.layers)+1
 
         # initialize affine layers with a forward pass
-        _ = X[0].view(1,-1)
+        _ = [X[0].view(1,-1)]
         for a in self.affine: 
-            _ = a(_)
+            _.append(a(*_))
 
-        # l1_median = None
-        # l1_geometric = 100
-        # if l1_proj is not None and median: 
-        #     if not isinstance(l1_proj, int): 
-        #         raise ValueError('l1 must be an integer')
-        #     L = L1_engine.L1_median(X, l1_proj, m, l1_eps)
-        #     kwargs = { }
-        # elif l1_proj is not None and geometric: 
-        #     if not isinstance(l1_proj, int): 
-        #         raise ValueError('l1 must be an integer')
-        #     # should change this to only use projection if # of activations > k
-        #     L = L1_engine.L1_geometric(X, l1_proj, m, l1_eps)
-        #     kwargs = { } 
-        # else: 
-        #     L = L1_engine.L1(X)
-        #     kwargs = {}
-
-        self.biases = [full_bias(l, self.affine[i].out_features) 
+        self.biases = [Aff.full_bias(l, self.affine[i].out_features) 
                         for i,l in enumerate(self.layers)]
         
+        forward_gamma = [ForwardPass(self.biases[0])]
         gamma = [self.biases[0]]
-        nu_hat_x = self.affine[0](X)
+
+        forward_x = ForwardPass(X)
+        nu_hat_x = forward_x.apply(self.affine[0])
 
         L0 = select_L(X, l1_proj, m, l1_eps, self.affine[0], l1_type=l1_type,
                       threshold=self.affine[0].in_features)
         l1 = L0.l1_norm()
-        # eye = L.input(self.affine[0].in_features, **kwargs)
-        # nu_hat_1 = self.affine[0](eye).unsqueeze(0)
-        # l1 = L.l1_norm(nu_hat_1)
+
         self.zl = [nu_hat_x + gamma[0] - epsilon*l1]
         self.zu = [nu_hat_x + gamma[0] + epsilon*l1]
 
@@ -160,20 +131,13 @@ class DualNetBounds:
             else: 
                 Ls.append(None)
 
-            # initialize new terms
-            # L.apply(self.affine[i+1], d)
-            # if not self.I_empty[-1]:
-            #     L.add_layer(self.affine[i+1], self.I, d, 
-            #                         scatter_grad, **kwargs)
-            # else:
-            #     L.skip()
-
+            forward_gamma.append(ForwardPass(self.biases[i+1]))
             gamma.append(self.biases[i+1])
             # propagate bias terms
             for j in range(0,i+1):
-                gamma[j] = self.affine[i+1](d * gamma[j])
-                
-            nu_hat_x = self.affine[i+1](d*nu_hat_x)
+                gamma[j] = forward_gamma[j].add_and_apply(d * gamma[j], self.affine[i+1])
+            
+            nu_hat_x = forward_x.add_and_apply(d*nu_hat_x, self.affine[i+1])
             # nu_hat_1 = batch(self.affine[i+1](unbatch(d.unsqueeze(1)*nu_hat_1)), n)
             # l1 = L0.l1_norm(nu_hat_1)
             L0.apply(self.affine[i+1], d)
@@ -201,24 +165,27 @@ class DualNetBounds:
     def g(self, c):
         n = c.size(0)
         nu = [[]]*self.k
-        nu[-1] = -c
+        nu[-1] = -unbatch(c)
         for i in range(self.k-2,-1,-1):
-            nu[i] = batch(self.affine_transpose[i](unbatch(nu[i+1])),n)
+            nu[i] = self.affine_transpose[i](*list(reversed(nu[i+1:])))
             if i > 0:
                 # avoid in place operation
-                out = nu[i].clone()
+                out = batch(nu[i],n).clone()
                 out[self.I_neg[i-1].unsqueeze(1)] = 0
                 if not self.I_empty[i-1]:
+                    idx = self.I[i-1].unsqueeze(1)
+                    nu_i = batch(nu[i],n)
                     if self.alpha_grad: 
-                        out[self.I[i-1].unsqueeze(1)] = (self.s[i-1].unsqueeze(1).expand(*nu[i].size())[self.I[i-1].unsqueeze(1)] * 
-                                                               nu[i][self.I[i-1].unsqueeze(1)])
+                        out[idx] = (self.s[i-1].unsqueeze(1).expand(*nu_i.size())[self.I[i-1].unsqueeze(1)] * 
+                                                               nu_i[self.I[i-1].unsqueeze(1)])
                     else:
-                        out[self.I[i-1].unsqueeze(1)] = ((self.s[i-1].unsqueeze(1).expand(*nu[i].size())[self.I[i-1].unsqueeze(1)] * 
-                                                                                   torch.clamp(nu[i], min=0)[self.I[i-1].unsqueeze(1)])
-                                                         + (self.s[i-1].detach().unsqueeze(1).expand(*nu[i].size())[self.I[i-1].unsqueeze(1)] * 
-                                                                                   torch.clamp(nu[i], max=0)[self.I[i-1].unsqueeze(1)]))
-                nu[i] = out
+                        out[idx] = ((self.s[i-1].unsqueeze(1).expand(*nu_i.size())[idx] * 
+                                                                                   torch.clamp(nu_i, min=0)[idx])
+                                                         + (self.s[i-1].detach().unsqueeze(1).expand(*nu_i.size())[idx] * 
+                                                                                   torch.clamp(nu_i, max=0)[idx]))
+                nu[i] = unbatch(out)
 
+        nu = [batch(nu0,n) for nu0 in nu]
         f = (-sum(nu[i+1].matmul(self.biases[i].view(-1)) for i in range(self.k-1))
              -nu[0].matmul(self.X.view(self.X.size(0),-1).unsqueeze(2)).squeeze(2)
              -self.epsilon*nu[0].abs().sum(2)

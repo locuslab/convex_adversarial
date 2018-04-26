@@ -51,38 +51,42 @@ class L1():
 
         self.is_input = all(kwarg is None for kwarg in kwargs)
         if self.is_input: 
-            self.nu = self.X.data.new(W.in_features, W.in_features)
-            torch.eye(W.in_features, out=self.nu)
-            self.nu = W(Variable(self.nu)).unsqueeze(0)
+            in_features = W.Ws[-1].in_features if isinstance(W.in_features, list) else W.in_features
+            self.nus = [Variable(self.X.data.new(in_features, in_features))]
+            torch.eye(in_features, out=self.nus[-1].data)
+            self.nu_hat = W(*self.nus).unsqueeze(0)
         else:
             self.I_ind = Variable(I.data.nonzero())
-            self.nu = Variable(X.data.new(I.data.sum(), d.size(1)).zero_())
-            self.nu.scatter_(1, self.I_ind[:,1,None], d[I][:,None])
+
+            self.nus = [Variable(X.data.new(I.data.sum(), d.size(1)).zero_())]
+            self.nus[-1].scatter_(1, self.I_ind[:,1,None], d[I][:,None])
 
             if not scatter_grad:
-                self.nu = self.nu.detach()
+                self.nus[-1] = self.nus[-1].detach()
 
-            self.nu = W(self.nu)
+            self.nu_hat = W(*self.nus)
             self.I = I
             self.zl = zl
             self.I_collapse = Variable(X.data.new(self.I_ind.size(0),X.size(0)).zero_())
             self.I_collapse.scatter_(1, self.I_ind[:,0][:,None], 1)
 
     
-    def apply(self, W, d):
+    def apply(self, W, d): 
         if self.is_input: 
             n = self.X.size(0)
-            self.nu = batch(W(unbatch(d.unsqueeze(1)*self.nu)), n)
+            self.nus.append(unbatch(d.unsqueeze(1)*self.nu_hat))
+            self.nu_hat = batch(W(*self.nus), n)
         else:
-            self.nu = W(d[self.I_ind[:,0]] * self.nu)
+            self.nus.append(d[self.I_ind[:,0]] * self.nu_hat)
+            self.nu_hat = W(*self.nus)
 
     def nu_zlu(self): 
-        nu_zl = (self.zl[self.I] * (-self.nu.t()).clamp(min=0)).mm(self.I_collapse).t()
-        nu_zu = (self.zl[self.I] * self.nu.t().clamp(min=0)).mm(self.I_collapse).t()
+        nu_zl = (self.zl[self.I] * (-self.nu_hat.t()).clamp(min=0)).mm(self.I_collapse).t()
+        nu_zu = (self.zl[self.I] * self.nu_hat.t().clamp(min=0)).mm(self.I_collapse).t()
         return nu_zl,nu_zu
 
     def l1_norm(self): 
-        return self.nu.abs().sum(1)
+        return self.nu_hat.abs().sum(1)
 
 class L1_Cauchy(): 
     def __init__(self, X, k, m, l1_eps, W, I=None, d=None, scatter_grad=None, zl=None): 
