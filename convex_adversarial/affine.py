@@ -142,7 +142,7 @@ class AffineConv2d(nn.Module, Affine):
                        padding=self.l.padding)
         out = convert4to2(out)
 
-        if self.infeatures is None or self.out_features is None: 
+        if self.in_features is None or self.out_features is None: 
             self.record_size(x,out)
 
         return out
