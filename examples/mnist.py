@@ -18,6 +18,7 @@ import setproctitle
 
 import problems as pblm
 from trainer import *
+import math
 
 if __name__ == "__main__": 
     args = pblm.argparser()
@@ -33,11 +34,15 @@ if __name__ == "__main__":
     torch.cuda.manual_seed(args.seed)
     if args.vgg: 
         model = pblm.mnist_model_vgg().cuda()
+        # s = 'experiments/mnist_vgg_proj/mnist200_vgg_batch_size_50_epochs_20_epsilon_0.001_l1_proj_200_l1_test_exact_l1_train_median_lr_0.001_opt_adam_seed_0_starting_epsilon_0.0001_model.pth'
+        # model.load_state_dict(torch.load(s))
         # reduce the test set
         _, test_loader = pblm.mnist_loaders(1, shuffle_test=True)
         test_loader = [tl for i,tl in enumerate(test_loader) if i < 200]
     elif args.large: 
         model = pblm.mnist_model_large().cuda()
+        # s = 'experiments/mnist_gradual/mnist2_large_batch_size_8_epochs_20_epsilon_0.1_l1_test_exact_l1_train_exact_lr_0.001_opt_adam_seed_0_starting_epsilon_0.1_model.pth'
+        # model.load_state_dict(torch.load(s))
         _, test_loader = pblm.mnist_loaders(32, shuffle_test=True)
         test_loader = [tl for i,tl in enumerate(test_loader) if i < 50]
     else: 
@@ -49,7 +54,14 @@ if __name__ == "__main__":
         y = Variable(y.cuda())
         break
     
-    # pblm.init_scale(model, X[:1], args.starting_epsilon)
+
+    for m in model.modules():
+        if isinstance(m, nn.Conv2d):
+            n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+            m.weight.data.normal_(0, math.sqrt(2. / n))
+            m.bias.data.zero_()
+
+    pblm.init_scale(model, X[:1], args.starting_epsilon)
 
     kwargs = pblm.args2kwargs(args, X=X)
 
