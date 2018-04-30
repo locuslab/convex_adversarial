@@ -41,8 +41,11 @@ def full_bias(l, n=None):
         if n is None: 
             raise ValueError("Need to pass n=<output dimension>")
         b = l.bias.unsqueeze(1).unsqueeze(2)
-        k = int((n/(b.numel()))**0.5)
-        return b.expand(b.numel(),k,k).contiguous().view(1,-1)
+        if isinstance(n, int): 
+            k = int((n/(b.numel()))**0.5)
+            return b.expand(b.numel(),k,k).contiguous().view(1,-1)
+        else: 
+            return b.expand(*n)
     elif isinstance(l, Dense): 
         return sum(full_bias(layer, n=n) for layer in l.Ws)
     elif isinstance(l, nn.Sequential) and len(l) == 0: 
