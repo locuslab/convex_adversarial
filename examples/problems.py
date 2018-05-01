@@ -9,6 +9,7 @@ import numpy as np
 import torch.utils.data as td
 import argparse
 from convex_adversarial import epsilon_from_model, DualNetBounds
+from convex_adversarial import Dense, DenseSequential
 import math
 
 def init_scale(model, X, epsilon): 
@@ -57,11 +58,21 @@ def mnist_model():
         nn.ReLU(),
         nn.Linear(100, 10)
     )
-    # for m in model.modules():
-    #     if isinstance(m, nn.Conv2d):
-    #         n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-    #         m.weight.data.normal_(0, math.sqrt(2. / n))
-    #         m.bias.data.zero_()
+    return model
+
+def mnist_model_bn(): 
+    model = nn.Sequential(
+        nn.Conv2d(1, 16, 4, stride=2, padding=1),
+        nn.BatchNorm2d(16), 
+        nn.ReLU(),
+        nn.Conv2d(16, 32, 4, stride=2, padding=1),
+        nn.BatchNorm2d(32), 
+        nn.ReLU(),
+        Flatten(),
+        nn.Linear(32*7*7,100),
+        nn.ReLU(),
+        nn.Linear(100, 10)
+    )
     return model
 
 def mnist_model_double(): 
@@ -82,6 +93,43 @@ def mnist_model_double():
             m.bias.data.zero_()
     return model
 
+
+
+def mnist_model_resnet(): 
+    model = DenseSequential(
+        nn.Conv2d(1, 16, 4, stride=2, padding=1),
+        nn.ReLU(),
+        Dense(nn.Conv2d(16, 32, 4, stride=2, padding=1)),
+        nn.ReLU(),
+        Dense(nn.Conv2d(16, 32, 1, stride=2, padding=0), 
+              None, 
+              nn.Conv2d(32, 32, 3, stride=1, padding=1)),
+        nn.ReLU(),
+        Flatten(),
+        nn.Linear(32*7*7,100),
+        nn.ReLU(),
+        nn.Linear(100, 10)
+    )
+    return model
+
+
+# def mnist_model_resnet(): 
+#     model = DenseSequential(
+#         nn.Conv2d(1, 32, 4, stride=2, padding=1),
+#         nn.ReLU(),
+#         Dense(nn.Conv2d(32, 64, 4, stride=2, padding=1)),
+#         nn.ReLU(),
+#         Dense(nn.Conv2d(32, 64, 1, stride=2, padding=0), 
+#               None, 
+#               nn.Conv2d(64, 64, 3, stride=1, padding=1)),
+#         nn.ReLU(),
+#         Flatten(),
+#         nn.Linear(64*7*7,1024),
+#         nn.ReLU(),
+#         nn.Linear(1024, 10)
+#     )
+#     return model
+
 def mnist_model_large(): 
     model = nn.Sequential(
         nn.Conv2d(1, 32, 4, stride=2, padding=1),
@@ -93,11 +141,6 @@ def mnist_model_large():
         nn.ReLU(),
         nn.Linear(1024, 10)
     )
-    for m in model.modules():
-        if isinstance(m, nn.Conv2d):
-            n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-            m.weight.data.normal_(0, math.sqrt(2. / n))
-            m.bias.data.zero_()
     return model
 
 def mnist_model_vgg(): 
@@ -218,21 +261,21 @@ def cifar_model():
 
 def cifar_model_vgg(): 
     model = nn.Sequential(
-        nn.Conv2d(3, 64, 3, stride=2, padding=1),
+        nn.Conv2d(3, 64, 4, stride=2, padding=1),
         nn.ReLU(),
-        nn.Conv2d(64, 128, 3, stride=2, padding=1),
+        nn.Conv2d(64, 128, 4, stride=2, padding=1),
         nn.ReLU(),
         nn.Conv2d(128, 256, 3, stride=1, padding=1),
         nn.ReLU(),
-        nn.Conv2d(256, 256, 3, stride=2, padding=1),
+        nn.Conv2d(256, 256, 4, stride=2, padding=1),
         nn.ReLU(),
         nn.Conv2d(256, 512, 3, stride=1, padding=1),
         nn.ReLU(),
-        nn.Conv2d(512, 512, 3, stride=2, padding=1),
+        nn.Conv2d(512, 512, 4, stride=2, padding=1),
         nn.ReLU(),
         nn.Conv2d(512, 512, 3, stride=1, padding=1),
         nn.ReLU(),
-        nn.Conv2d(512, 512, 3, stride=2, padding=1),
+        nn.Conv2d(512, 512, 4, stride=2, padding=1),
         nn.ReLU(),
         Flatten(),
         nn.Linear(512,512),
@@ -303,43 +346,47 @@ def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3,
     parser.add_argument('--prefix')
     parser.add_argument('--eval')
     parser.add_argument('--resume', action='store_true')
-    parser.add_argument('--baseline', action='store_true')
     parser.add_argument('--alpha_grad', default=True)
     parser.add_argument('--scatter_grad', default=True)
     parser.add_argument('--l1_proj', type=int, default=l1_proj)
     parser.add_argument('--delta', type=float, default=delta)
     parser.add_argument('--m', type=int, default=m)
     parser.add_argument('--l1_eps', type=float, default=l1_eps)
-    parser.add_argument('--large', action='store_true')
-    parser.add_argument('--vgg', action='store_true')
-    parser.add_argument('--resnet', action='store_true')
+    # parser.add_argument('--large', action='store_true')
+    # parser.add_argument('--vgg', action='store_true')
+    # parser.add_argument('--resnet', action='store_true')
     parser.add_argument('--l1_train', default=l1_train)
     parser.add_argument('--l1_test', default=l1_test)
     parser.add_argument('--opt', default=opt)
     parser.add_argument('--momentum', type=float, default=momentum)
     parser.add_argument('--weight_decay', type=float, default=weight_decay)
+    parser.add_argument('--model', default=None)
+    parser.add_argument('--method', default=None)
+
     
     args = parser.parse_args()
     if args.starting_epsilon is None:
         args.starting_epsilon = args.epsilon 
     if args.prefix: 
-        if args.vgg: 
-            args.prefix += '_vgg'
-        elif args.large: 
-            args.prefix += '_large'
-        elif args.resnet: 
-            args.prefix += '_resnet'
+        # if args.vgg: 
+        #     args.prefix += '_vgg'
+        # elif args.large: 
+        #     args.prefix += '_large'
+        # elif args.resnet: 
+        #     args.prefix += '_resnet'
+        if args.model is not None: 
+            args.prefix += '_'+args.model
 
-        if args.baseline: 
-            args.prefix += '_baseline'
+        if args.method is not None: 
+            args.prefix += '_'+args.method
 
         if args.eval: 
             args.prefix += '_eval_' + args.eval.replace('/','_')
         else:
             banned = ['alpha_grad', 'scatter_grad', 'verbose', 'prefix',
                       'resume', 'baseline', 'eval', 
-                      'large', 'vgg', 'resnet']
-            if args.baseline:
+                      'method', 'model']
+            if args.method == 'baseline':
                 banned += ['epsilon', 'starting_epsilon', 'l1_test', 'l1_train', 'm', 'l1_proj']
             if args.opt == 'adam': 
                 banned += ['momentum', 'weight_decay']
