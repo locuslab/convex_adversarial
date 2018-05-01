@@ -221,7 +221,7 @@ class DualReLU():
     def apply(self, dual_layer): 
         if self.I_empty: 
             return
-        if isinstance(dual_layer, (DualReLU, ApplyF)): 
+        if isinstance(dual_layer, DualReLU): 
             self.nus.append(dual_layer.affine(*self.nus, I_ind=self.I_ind))
         else: 
             self.nus.append(dual_layer.affine(*self.nus))
@@ -375,6 +375,38 @@ class DualDense():
             return sum(fvals)
 
 
+class DualBatchNorm2d(): 
+    def __init__(self, layer, minibatch): 
+        if layer.training: 
+            minibatch = minibatch.data.transpose(0,1).contiguous()
+            minibatch = minibatch.view(minibatch.size(0), -1)
+            self.mu = minibatch.mean(1)
+            self.sigma = minibatch.std(1)
+        else: 
+            self.mu = layer.running_mean
+            self.var = layer.running_var
+        
+        self.weight = layer.weight
+        self.bias = layer.bias
+
+        self.eps = layer.eps
+        assert False
+
+    def affine(self, *xs): 
+        return xs[-1]
+
+    def affine_transpose(self, *xs): 
+        return xs[-1]
+
+    def apply(self, dual_layer): 
+        pass
+
+    def fval(self, nu=None, nu_prev=None): 
+        if nu is None: 
+            return 0,0
+        else:
+            return 0
+
 class DualSequential(): 
     def affine(self, *xs): 
         return xs[-1]
@@ -391,12 +423,6 @@ class DualSequential():
         else:
             return 0
 
-class ApplyF():
-    def __init__(self, f): 
-        self.f = f 
-    def affine(self, *xs, **kwargs):
-        return self.f(*xs, **kwargs)
-
 class DualNetBounds: 
     def __init__(self, net, X, epsilon, alpha_grad=False, scatter_grad=False, 
                  l1_proj=None, l1_eps=None, m=None, 
@@ -411,14 +437,15 @@ class DualNetBounds:
         l1_eps : the bound is correct up to a 1/(1-l1_eps) factor
         m : number of probabilistic bounds to take the max over
         """
-        _ = [X[0:1]]
-        nf = [_[0].size()]
+        # need to change that if no batchnorm, can pass just a single example
+        zs = [Variable(X.data, volatile=True)]
+        nf = [zs[0].size()]
         for l in net: 
             if isinstance(l, Dense): 
-                _.append(l(*_))
+                zs.append(l(*zs))
             else:
-                _.append(l(_[-1]))
-            nf.append(_[-1].size())
+                zs.append(l(zs[-1]))
+            nf.append(zs[-1].size())
 
         # if l1_proj is not None and l1_type=='median' and X[0].numel() > l1_proj:
 
@@ -465,6 +492,8 @@ class DualNetBounds:
             elif isinstance(layer, Dense): 
                 assert isinstance(dense_t[i], Dense)
                 dual_layer = DualDense(layer, dense_t[i], dual_net, out_f)
+            elif isinstance(layer, nn.BatchNorm2d):
+                dual_layer = DualBatchNorm2d(layer, zs[i])
             else:
                 print(layer)
                 raise ValueError("No module for layer {}".format(str(layer.__class__.__name__)))
