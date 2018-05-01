@@ -29,6 +29,7 @@ def toAffine(l):
     elif isinstance(l, nn.Sequential) and len(l) == 0:
         return nn.Sequential() 
     else:
+        print(l)
         raise ValueError("Affine class not found for given layer.")
 
 # helper function to extract biases from layers
@@ -47,7 +48,7 @@ def full_bias(l, n=None):
         else: 
             return b.expand(*n)
     elif isinstance(l, Dense): 
-        return sum(full_bias(layer, n=n) for layer in l.Ws)
+        return sum(full_bias(layer, n=n) for layer in l.Ws if layer is not None)
     elif isinstance(l, nn.Sequential) and len(l) == 0: 
         return 0
     else:
@@ -140,6 +141,9 @@ class AffineConv2d(nn.Module, Affine):
         x = xs[-1]
         if x.dim() == 2: 
             x = convert2to4(x, self.l)
+        if xs[-1].dim() == 5: 
+            n = x.size(0)
+            x = x.view(-1, *(x.size()[-3:]))
         out = conv2d(x, self.l.weight, 
                        stride=self.l.stride,
                        padding=self.l.padding)
@@ -147,6 +151,9 @@ class AffineConv2d(nn.Module, Affine):
 
         if self.in_features is None or self.out_features is None: 
             self.record_size(x,out)
+
+        if xs[-1].dim() == 5: 
+            out = out.view(n, -1, *(out.size()[-3:]))
 
         return out
 
@@ -183,7 +190,8 @@ class AffineTransposeConv2d(nn.Module):
 
 class AffineDense(Dense, Affine): 
     def __init__(self, D): 
-        super(AffineDense, self).__init__(*list(toAffine(W) for W in D.Ws))
+        super(AffineDense, self).__init__(*list(toAffine(W) if W is not
+            None else None for W in D.Ws))
         Affine.__init__(self)
 
     def forward(self, *xs): 
@@ -195,19 +203,25 @@ class AffineDense(Dense, Affine):
 
 
 def transpose_all(ls): 
-    if all(isinstance(l, Dense) for l in ls):
-        layers = [Dense() for l in ls]
-        for i,l in reversed(list(enumerate(ls))): 
-            for j,W in enumerate(l.Ws): 
+    # if all(isinstance(l, Dense) for l in ls):
+    layers = [Dense() if isinstance(l,Dense) else l for l in ls]
+    for i,l in reversed(list(enumerate(ls))): 
+        if not isinstance(l,Dense):
+            continue
+        for j,W in enumerate(l.Ws): 
+            if W is not None:
+                # WARNING HACK ONLY FOR 1 SKIP CONNECTIONS
+                if len(layers[i+j-len(l.Ws)+1].Ws)  == 1: 
+                    layers[i+j-len(l.Ws)+1].Ws.append(None)
                 layers[i+j-len(l.Ws)+1].Ws.append(toAffineTranspose(W))
-        return layers
-        raise NotImplementedError
-    elif all(not isinstance(l,Dense) for l in ls):
-        return [toAffineTranspose(l) for l in ls]
-    else:
-        raise ValueError('In order to convert Dense Affine layers we ' 
-                         'need all layers to be dense in this '
-                         'implementation. ')
+    return layers
+    # raise NotImplementedError
+    # elif all(not isinstance(l,Dense) for l in ls):
+    #     return [toAffineTranspose(l) for l in ls]
+    # else:
+    #     raise ValueError('In order to convert Dense Affine layers we ' 
+    #                      'need all layers to be dense in this '
+                         # 'implementation. ')
 
 # class AffineTransposeDense(Dense): 
 #     def __init__(self, ls): 

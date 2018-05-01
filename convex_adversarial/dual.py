@@ -11,6 +11,8 @@ from . import affine as Aff
 from . import l1 as L1_engine
 from .dense import Dense
 
+import warnings
+
 def batch(A, n): 
     return A.view(n, -1, *A.size()[1:])
 def unbatch(A): 
@@ -73,6 +75,28 @@ class InfBall():
             nu_x = nu.matmul(self.nu_x[0].view(self.nu_x[0].size(0),-1).unsqueeze(2)).squeeze(2)
             l1 = self.epsilon*nu.abs().sum(2)
             return -nu_x - l1
+
+class InfBallProj():
+    def __init__(self, X, epsilon, k): 
+        self.epsilon = epsilon
+
+        n = X[0].numel()
+        self.nu_x = [X] 
+        self.nu = [Variable(X.data.new(1,k,*X.size()[1:]).cauchy_())]
+        # slef.nu_one = [Variable(X.data.new(1,*X.size()[1:]).fill_(1))]
+
+    def apply(self, dual_layer): 
+        self.nu_x.append(dual_layer.affine(*self.nu_x))
+        self.nu.append(dual_layer.affine(*self.nu))
+        # self.nu_one.append(dual_layer.affine(*self.nu_one))
+
+    def fval(self, nu=None, nu_prev=None): 
+        if nu is None: 
+            l1 = torch.median(self.nu[-1].abs(), 1)[0]
+            return (self.nu_x[-1] - self.epsilon*l1, 
+                    self.nu_x[-1] + self.epsilon*l1)
+        else: 
+            return InfBall.fval(self, nu=nu, nu_prev=nu_prev)
 
 class DualLinear(): 
     def __init__(self, layer, out_features): 
@@ -203,9 +227,9 @@ class DualReLU():
             self.nus.append(dual_layer.affine(*self.nus))
 
     def fval(self, nu=None, nu_prev=None): 
-        if self.I_empty: 
-            return True
         if nu_prev is None:
+            if self.I_empty: 
+                return 0,0
             nu = self.nus[-1]
             nu = nu.view(nu.size(0), -1)
             zlI = self.zl[self.I]
@@ -216,6 +240,8 @@ class DualReLU():
             zu = zu.view(-1, *(self.nus[-1].size()[1:]))
             return zl,zu
         else: 
+            if self.I_empty: 
+                return 0
             n = nu_prev.size(0)
             nu = nu_prev.view(n, nu_prev.size(1), -1)
             zl = self.zl.view(n, -1)
@@ -224,8 +250,7 @@ class DualReLU():
 
     def affine(self, *xs, I_ind=None): 
         x = xs[-1]
-        # if x.dim() == 2: 
-        #     x = convert4to2(x)
+
         d = self.d 
         if x.dim() > d.dim():
             d = d.unsqueeze(1)
@@ -237,6 +262,134 @@ class DualReLU():
 
     def affine_transpose(self, *xs): 
         return self.affine(*xs)
+
+
+class DualReLUProj(DualReLU): 
+    def __init__(self, I, d, zl, k): 
+        n = I.size(0)
+
+        self.d = d
+        self.I = I
+        self.zl = zl
+
+        if I.data.sum() == 0: 
+            warnings.warn('ReLU projection has no origin crossing activations')
+            self.I_empty = True
+            return
+        else:
+            self.I_empty = False
+
+        nu = Variable(zl.data.new(n, k, *(d.size()[1:])).zero_())
+        nu_one = Variable(zl.data.new(n, *(d.size()[1:])).zero_())
+        # print(I.unsqueeze(1).size(), nu.size(), nu_one.size())
+        # nu.data[(I.data).unsqueeze(1).expand_as(nu)].cauchy_()
+        if  (I.data).sum() > 0: 
+            # nu_I = nu.data[I.data.unsqueeze(1).expand_as(nu)]
+            # nu.data[I.data.unsqueeze(1).expand_as(nu)] = nu.data[I.data.unsqueeze(1).expand_as(nu)].cauchy_()
+            nu.data[I.data.unsqueeze(1).expand_as(nu)] = nu.data.new(I.data.sum()*k).cauchy_()
+            # nu.data[I.data.unsqueeze(1).expand_as(nu)] = nu.data.new(I.data.sum()*k).fill_(3)
+            nu_one.data[I.data] = 1
+        nu = zl.unsqueeze(1)*nu
+        nu_one = zl*nu_one
+
+        self.nus = [d.unsqueeze(1)*nu]
+        self.nu_ones = [d*nu_one]
+
+    def apply(self, dual_layer): 
+        if self.I_empty: 
+            return
+        self.nus.append(dual_layer.affine(*self.nus))
+        self.nu_ones.append(dual_layer.affine(*self.nu_ones))
+
+    def fval(self, nu=None, nu_prev=None): 
+        if nu_prev is None:
+            if self.I_empty: 
+                return 0,0
+
+            n = torch.median(self.nus[-1].abs(), 1)[0]
+            no = self.nu_ones[-1]
+
+            # From notes: 
+            # \sum_i l_i[nu_i]_+ \approx (-n + no)/2
+            # which is the negative of the term for the upper bound
+            # for the lower bound, use -nu and negate the output, so 
+            # (n - no)/2 since the no term flips twice and the l1 term
+            # flips only once. 
+            zl = (-n - no)/2
+            zu = (n - no)/2
+            # zl = (-n + no)/2
+            # zu = -(-n - no)/2
+
+            return zl,zu
+        else: 
+            return DualReLU.fval(self, nu=nu, nu_prev=nu_prev)
+
+class DualDense(): 
+    def __init__(self, dense, dense_t, net, out_features): 
+        self.duals = []
+        for i,W in enumerate(dense.Ws): 
+            if isinstance(W, nn.Conv2d):
+                dual_layer = DualConv2d(W, out_features)
+            elif isinstance(W, nn.Linear): 
+                dual_layer = DualLinear(W, out_features)
+            elif isinstance(W, nn.Sequential) and len(W) == 0: 
+                dual_layer = DualSequential()
+            elif W is None:
+                dual_layer = None
+            else:
+                print(W)
+                raise ValueError("Don't know how to parse dense structure")
+            self.duals.append(dual_layer)
+
+            if i > 0 and W is not None: 
+                net[-i].dual_ts = [dual_layer] + [None]*(i-len(net[-i].dual_ts)) + net[-i].dual_ts
+        
+
+        self.dual_ts = [self.duals[-1]]
+
+    def affine(self, *xs): 
+        duals = self.duals[-min(len(xs),len(self.duals)):]
+
+        return sum(W.affine(*xs[:i+1]) 
+            for i,W in zip(range(-len(duals) + len(xs), len(xs)),
+                duals) if W is not None)
+
+    def affine_transpose(self, *xs): 
+        dual_ts = self.dual_ts[-min(len(xs),len(self.dual_ts)):]
+        return sum(W.affine_transpose(*xs[:i+1]) 
+            for i,W in zip(range(-len(dual_ts) + len(xs), len(xs)),
+                dual_ts) if W is not None)
+
+    def apply(self, dual_layer): 
+        for W in self.duals: 
+            if W is not None: 
+                W.apply(dual_layer)
+
+    def fval(self, nu=None, nu_prev=None): 
+        fvals = list(W.fval(nu=nu, nu_prev=nu_prev) for W in self.duals if W is
+            not None)
+        if nu is None: 
+            l,u = zip(*fvals)
+            return sum(l), sum(u)
+        else:
+            return sum(fvals)
+
+
+class DualSequential(): 
+    def affine(self, *xs): 
+        return xs[-1]
+
+    def affine_transpose(self, *xs): 
+        return xs[-1]
+
+    def apply(self, dual_layer): 
+        pass
+
+    def fval(self, nu=None, nu_prev=None): 
+        if nu is None: 
+            return 0,0
+        else:
+            return 0
 
 class ApplyF():
     def __init__(self, f): 
@@ -258,13 +411,26 @@ class DualNetBounds:
         l1_eps : the bound is correct up to a 1/(1-l1_eps) factor
         m : number of probabilistic bounds to take the max over
         """
-        _ = X[0:1]
-        nf = [_.size()]
+        _ = [X[0:1]]
+        nf = [_[0].size()]
         for l in net: 
-            _ = l(_)
-            nf.append(_.size())
+            if isinstance(l, Dense): 
+                _.append(l(*_))
+            else:
+                _.append(l(_[-1]))
+            nf.append(_[-1].size())
+
+        # if l1_proj is not None and l1_type=='median' and X[0].numel() > l1_proj:
+
+        #     # need to change to only use projection when necessary
+        #     dual_net = [InfBallProj(X,epsilon,l1_proj)]
+        # else:
+        #     dual_net = [InfBall(X, epsilon)]
         dual_net = [InfBall(X, epsilon)]
-        # i = 0
+
+        if any(isinstance(l, Dense) for l in net): 
+            dense_t = Aff.transpose_all(net)
+
         for i,(in_f,out_f,layer) in enumerate(zip(nf[:-1], nf[1:], net)): 
             if isinstance(layer, nn.Linear): 
                 dual_layer = DualLinear(layer, out_f)
@@ -272,24 +438,36 @@ class DualNetBounds:
                 dual_layer = DualConv2d(layer, out_f)
             elif isinstance(layer, nn.ReLU): 
                 zl, zu = zip(*[l.fval() for l in dual_net])
-                # print(dual_net[-2], zl[-2])
-                #     for l in dual_net:
-                #         print(l.fval()[0])
-                #     assert False 
-                # i += 1
                 zl, zu = sum(zl), sum(zu)
-                # print(zl.data.sum(), zu.data.sum(), i)
+
                 d = (zl > 0).detach().type_as(X)
                 I = ((zu > 0) * (zl < 0)).detach()
                 if I.data.sum() > 0:
                     d[I] += zu[I]/(zu[I] - zl[I])
-                # print(d.data.norm(), I.data.sum())
-                dual_layer = DualReLU(I, d, zl)
+
+                # print(i)
+                if l1_proj is not None and l1_type=='median' and I.data.sum() > l1_proj:
+                    dual_layer = DualReLUProj(I, d, zl, l1_proj)
+                else:
+                    dual_layer = DualReLU(I, d, zl)
+                # extra_layer = DualReLU(I,d,zl)
+                # proj = DualReLUProj(I, d, zl, l1_proj)
+                # print
+                # print(I.size(), d.size(), zl.size())
+                # old = L1_engine.L1_Cauchy(X, l1_proj, 1, 0, nn.Sequential(),
+                #                           I=I.view(50,-1), d=d.view(50,-1), zl=zl.view(50,-1),
+                #                             scatter_grad=True)
+                # print(proj.nus[0].size(),old.nu.size())
+                # print((proj.nus[0].view(50,200,-1) - old.nu).norm())
+                # print((proj.d - exact.d).norm().data)
             elif 'Flatten' in (str(layer.__class__.__name__)): 
                 dual_layer = DualReshape(in_f, out_f)
+            elif isinstance(layer, Dense): 
+                assert isinstance(dense_t[i], Dense)
+                dual_layer = DualDense(layer, dense_t[i], dual_net, out_f)
             else:
                 print(layer)
-                raise ValueError
+                raise ValueError("No module for layer {}".format(str(layer.__class__.__name__)))
 
             # skip last layer
             if i < len(net)-1: 
@@ -298,250 +476,68 @@ class DualNetBounds:
                 dual_net.append(dual_layer)
             else: 
                 self.last_layer = dual_layer
+            # if i == 2: 
+            #     m = 10
+            #     I.fill_(1)
+            #     zl.fill_(-1)
+            #     duals = [DualReLUProj(I, d, zl, 50) for _ in range(m)]
+            #     for dual in duals: 
+            #         dual.apply(dual_layer)
+            #     avg_l = sum([dual.fval()[0] for dual in duals])/m
+            #     avg_u = sum([dual.fval()[1] for dual in duals])/m
+            # #     dual_exact = DualReLU(I, d, zl)
+            # #     dual_exact.apply(dual_layer)
+            # # #     # dual.nus[-1]
+            # # #     # print(dual.nus[-1].abs().median(1)[0])
+            #     print(avg_l, avg_u)
+
+            #     # dual_p = DualReLUProj(I, d, zl, 50)
+            #     dual = DualReLU(I, d, zl)
+            #     # dual_p.apply(dual_net[3])
+            #     dual.apply(dual_layer)
+            #     # print(dual.nus[0])
+            #     print(dual.fval())
+            # # if i == 4: 
+            # #     I.fill_(1)
+            # #     zl.fill_(1)
+            #     assert False
+            #     print(dual_exact.fval()[0])
+                # print(dual_exact.nus[-1].view(12,100,101).abs().sum(1))
+                # print(dual_net[2].fval()[0])
+                # print(dual_layer)
+                # assert False
+                # print(dual.fval())
+                # tmp = [DualReLUProj(I, d, zl, l1_proj) for _ in range(10)]
+                # for t in tmp: 
+                #     t.apply(dual_layer)
+                # avg_proj = sum([t.fval()[0] for t in tmp])/10
+                # print(avg_proj)
+                # projection_layer = dual_net[-2]
+                # extra_layer.apply(dual_layer)
+                # print(projection_layer.fval()[0].data)
+                # print(extra_layer.fval()[0].data)
+                # print(projection_layer.fval()[0].data - extra_layer.fval()[0].data)
+                # assert False
         self.dual_net = dual_net
         return 
-
-        n = X.size(0)
-        self.layers = [l for l in net if isinstance(l, (nn.Linear, nn.Conv2d, Dense))]
-
-        # self.affine_transpose = [Aff.toAffineTranspose(l) for l in self.layers]
-        self.affine_transpose = Aff.transpose_all(self.layers)
-        self.affine = [Aff.toAffine(l) for l in self.layers]
-
-        self.k = len(self.layers)+1
-
-        # initialize affine layers with a forward pass
-        _ = [X[0].view(1,-1)]
-        for a in self.affine: 
-            _.append(a(*_))
-
-        self.biases = [Aff.full_bias(l, self.affine[i].out_features) 
-                        for i,l in enumerate(self.layers)]
-        
-        forward_gamma = [ForwardPass(self.biases[0])]
-        gamma = [self.biases[0]]
-
-        forward_x = ForwardPass(X)
-        nu_hat_x = forward_x.apply(self.affine[0])
-
-        L0 = select_L(X, l1_proj, m, l1_eps, self.affine[0], l1_type=l1_type,
-                      threshold=self.affine[0].in_features)
-        l1 = L0.l1_norm()
-
-        self.zl = [nu_hat_x + gamma[0] - epsilon*l1]
-        self.zu = [nu_hat_x + gamma[0] + epsilon*l1]
-        tmp22 = self.zl[0].data
-
-        self.I = []
-        self.I_empty = []
-        self.I_neg = []
-        self.I_pos = []
-        self.X = X
-        self.epsilon = epsilon
-        I_collapse = []
-        Ls = []
-
-        # set flags
-        self.scatter_grad = scatter_grad
-        self.alpha_grad = alpha_grad
-        for i in range(0,self.k-2):
-            # compute sets and activation
-            self.I_neg.append((self.zu[-1] <= 0).detach())
-            self.I_pos.append((self.zl[-1] > 0).detach())
-            self.I.append(((self.zu[-1] > 0) * (self.zl[-1] < 0)).detach())
-            self.I_empty.append(self.I[-1].data.long().sum() == 0)
-            
-            I_nonzero = ((self.zu[-1]!=self.zl[-1])*self.I[-1]).detach()
-            d = self.I_pos[-1].type_as(X).clone()
-
-            # Avoid division by zero by indexing with I_nonzero
-            if I_nonzero.data.sum() > 0:
-                d[I_nonzero] += self.zu[-1][I_nonzero]/(self.zu[-1][I_nonzero] - self.zl[-1][I_nonzero])
-            d2 = d.data
-            # if i == 1: 
-            #     l_ = [nu_hat_x + epsilon*l1] + list(gamma) + list(nu_zus)
-            #     print([l0_.data.norm() for l0_ in l_])
-            #     # print(self.zu[-1].norm())
-            #     assert False
-            for L in Ls: 
-                if L is not None: 
-                    L.apply(self.affine[i+1], d)
-            if not self.I_empty[-1]: 
-                Ls.append(select_L(X, l1_proj, m, l1_eps, self.affine[i+1],
-                                   l1_type=l1_type,
-                                   threshold=self.I[-1].data.sum()/X.size(0),
-                                   I=self.I[-1], d=d,
-                                   scatter_grad=scatter_grad, zl=self.zl[-1]))
-            else: 
-                Ls.append(None)
-            nu0_2 = (Ls[0].nus[0]).data
-            I2 = self.I[-1].data
-            zl2 = self.zl[-1].data
-
-            forward_gamma.append(ForwardPass(self.biases[i+1]))
-            gamma.append(self.biases[i+1])
-            # propagate bias terms
-            for j in range(0,i+1):
-                gamma[j] = forward_gamma[j].add_and_apply(d * gamma[j], self.affine[i+1])
-            
-            nu_hat_x = forward_x.add_and_apply(d*nu_hat_x, self.affine[i+1])
-            # nu_hat_1 = batch(self.affine[i+1](unbatch(d.unsqueeze(1)*nu_hat_1)), n)
-            # l1 = L0.l1_norm(nu_hat_1)
-            L0.apply(self.affine[i+1], d)
-            l1 = L0.l1_norm()
-
-            # nu_zl, nu_zu = L.nu_zlu(self.zl, *args)
-            if not all(L is None for L in Ls): 
-                nu_zls, nu_zus = zip(*[L.nu_zlu() for L in Ls if L is not None])
-            else:
-                nu_zls, nu_zus = [],[]
-            # compute bounds
-            # print(nu_hat_x.size(), sum(gamma).size(), l1.size(), sum(nu_zls).size())
-            # if i == 1:
-            #     print(nu_hat_x - epsilon*l1, gamma, nu_zls)
-            #     assert False
-            self.zl.append(nu_hat_x + sum(gamma) - epsilon*l1 + sum(nu_zls))
-            self.zu.append(nu_hat_x + sum(gamma) + epsilon*l1 - sum(nu_zus))
-        
-        self.s = [torch.zeros_like(u) for l,u in zip(self.zl, self.zu)]
-        for (s,l,u) in zip(self.s,self.zl, self.zu): 
-            I_nonzero = (u != l).detach()
-            if I_nonzero.data.sum() > 0: 
-                s[I_nonzero] = u[I_nonzero]/(u[I_nonzero]-l[I_nonzero])
-        # print("*"*80)
-        # print((tmp11.view_as(tmp22)-tmp22).norm())
-        # print((dual_layer.d.data.view_as(d2)-d2).norm())
-        # print((d1[I1]-d2[I2]).norm())
-        # print((dual_layer.zl.data.view_as(zl2)-zl2).norm())
-        # print((dual_layer.I.data.view_as(I2)-I2).float().norm())
-        # print((dual_layer.nus[0].data-nu0_2).norm())
-        # print(nu0_1.norm(), nu0_2.norm())
-        # print(I.data.nonzero(), I2)
-        # print((tmp1.view_as(tmp2)-tmp2).norm())
-        # print([g.data.sum() for g in nu_zls])
-        # for zl,zu in zip(self.zl,self.zu): 
-        #     print(zl.data.sum(), zu.data.sum())
-        # assert False
-        # print(len(self.zl))
         
     def g(self, c):
         nu = [-c]
         nu.append(self.last_layer.affine_transpose(nu[0]))
         for l in reversed(self.dual_net[1:]): 
             nu.append(l.affine_transpose(nu[-1]))
-            # print(nu[-1].size())
-
         dual_net = self.dual_net + [self.last_layer]
         
-        nu_ = nu
-
         nu.append(None)
         nu = list(reversed(nu))
-        # [None, nu1, ..., nuk=c]
+        # nu = [None, nu1, ..., nuk=c]
 
-        out = sum(l.fval(nu=n, nu_prev=nprev) 
+        # print(sum(l.fval(nu=n, nu_prev=nprev) 
+        #     for l,nprev,n in zip(dual_net, nu[:-1],nu[1:])))
+        # assert False
+
+        return sum(l.fval(nu=n, nu_prev=nprev) 
             for l,nprev,n in zip(dual_net, nu[:-1],nu[1:]))
-        return out
-
-
-        # nu = list(reversed(nu[1:]))
-        # out = sum(l.fval(nu=n) for l,n in zip(self.dual_net, nu))
-        # print(out)
-        # print(nu[0])
-        # nu_ = [nu[0], nu[1], nu[3], nu[5], nu[7], nu[9]]
-        # assert False
-        # if self.last_layer is not None: 
-        #     nu = batch(self.last_layer.affine_transpose(unbatch(c)), c.size(0)).transpose(-1,-2)
-        #     def mm_nu(*xs, I_ind=None): 
-        #         squeeze = False
-        #         x = xs[-1]
-        #         if x.dim() < nu.dim():
-        #             squeeze = True
-        #             x = x.unsqueeze(1)
-        #         if I_ind is not None: 
-        #             nu0 = nu[I_ind[:,0]]
-        #         else: 
-        #             nu0  = nu
-        #         if squeeze: 
-        #             return x.bmm(nu0).squeeze(1)
-        #         else:
-        #             return x.bmm(nu0)
-        #     F = ApplyF(mm_nu)
-        #     for l in self.dual_net: 
-        #         l.apply(F)
-        #     self.dual_net.append(self.last_layer)
-        #     self.last_layer = None
-
-
-        n = c.size(0)
-        nu = [[]]*self.k
-        nu[-1] = -unbatch(c)
-        for i in range(self.k-2,-1,-1):
-            nu[i] = self.affine_transpose[i](*list(reversed(nu[i+1:])))
-            if i > 0:
-                # avoid in place operation
-                out = batch(nu[i],n).clone()
-                out[self.I_neg[i-1].unsqueeze(1)] = 0
-                if not self.I_empty[i-1]:
-                    idx = self.I[i-1].unsqueeze(1)
-                    nu_i = batch(nu[i],n)
-                    if self.alpha_grad: 
-                        out[idx] = (self.s[i-1].unsqueeze(1).expand(*nu_i.size())[self.I[i-1].unsqueeze(1)] * 
-                                                               nu_i[self.I[i-1].unsqueeze(1)])
-                    else:
-                        out[idx] = ((self.s[i-1].unsqueeze(1).expand(*nu_i.size())[idx] * 
-                                                                                   torch.clamp(nu_i, min=0)[idx])
-                                                         + (self.s[i-1].detach().unsqueeze(1).expand(*nu_i.size())[idx] * 
-                                                                                   torch.clamp(nu_i, max=0)[idx]))
-                nu[i] = unbatch(out)
-
-        nu = [batch(nu0,n) for nu0 in nu]
-        f = (-sum(nu[i+1].matmul(self.biases[i].view(-1)) for i in range(self.k-1))
-             -nu[0].matmul(self.X.view(self.X.size(0),-1).unsqueeze(2)).squeeze(2)
-             -self.epsilon*nu[0].abs().sum(2)
-             + sum((nu[i].clamp(min=0)*self.zl[i-1].unsqueeze(1)).matmul(self.I[i-1].type_as(self.X).unsqueeze(2)).squeeze(2) 
-                    for i in range(1, self.k-1) if not self.I_empty[i-1]))
-        # print(-self.epsilon*nu[0].abs().sum(2)-nu[0].matmul(self.X.view(self.X.size(0),-1).unsqueeze(2)).squeeze(2))
-        # for i in range(len(nu_)): 
-            # print(nu_[i].size(), nu[i].size())
-            # print((nu[i].data-nu_[i].data).norm())
-        # print(nu[0].abs().sum(2))
-        # print(nu_[0].abs().sum(2))
-        # print(nu[0])
-        # print(f)
-        # assert False
-        # print((nu_[0] - nu[5]).data.norm())
-        # print((nu_[2] - nu[4]).data.norm())
-        # print((nu_[4] - nu[3]).data.norm())
-        # print((nu_[6] - nu[2]).data.norm())
-        # print((nu_[8] - nu[1]).data.norm())
-        # print((nu_[9] - nu[0]).data.norm())
-        # self.dual_net.append(self.last_layer)
-        # print((self.dual_net[0].fval(nu=nu_[9])-nu[0].matmul(self.X.view
-        #                     (self.X.size(0),-1).unsqueeze(2)).squeeze(2)
-        #                 -self.epsilon*nu[0].abs().sum(2)).data.norm())
-        # for i in range(self.k-1): 
-        #     print(1+2*i, 8-2*i)
-        #     print((self.dual_net[1+2*i].fval(nu_[8-2*i]) - 
-        #                       nu[1+i].matmul(self.biases[0+i].view
-        #                         (-1))).data.norm())
-
-        # for i in range(1, self.k-1): 
-        #     print(2*i, 9-2*i)
-        #     print((self.dual_net[2*i].fval(nu=nu_[9 - 2*i], nu_prev=nu_
-        #         [10-2*i])-(nu[i].clamp
-        #                     (min=0)*self.zl[i-1].unsqueeze(1)).matmul(self.I
-        #                     [i-1].type_as(self.X).unsqueeze(2)).squeeze(2)
-        #                     ).data.norm())
-
-        # print(len(nu_), len(self.dual_net))
-        # print("*"*80)
-        # print()
-        # # print(nu_[1].size(), nu_[2].size(), nu[-2].size())
-        # # print(nu_[0])
-        # # print(nu[-1])
-        # assert False
-        return f
 
 def robust_loss(net, epsilon, X, y, 
                 size_average=True, **kwargs):
