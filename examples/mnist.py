@@ -1,6 +1,6 @@
 import waitGPU
-import setGPU
-# waitGPU.wait(utilization=50, available_memory=14000, interval=60)
+# import setGPU
+waitGPU.wait(utilization=50, available_memory=10000, interval=60)
 # waitGPU.wait(gpu_ids=[1,3], utilization=20, available_memory=10000, interval=60)
 
 import torch
@@ -43,9 +43,10 @@ if __name__ == "__main__":
     elif args.model == 'large': 
         model = pblm.mnist_model_large().cuda()
         # s = 'experiments/mnist_gradual/mnist2_large_batch_size_8_epochs_20_epsilon_0.1_l1_test_exact_l1_train_exact_lr_0.001_opt_adam_seed_0_starting_epsilon_0.1_model.pth'
+        # s = 'experiments/mnist_large_madry.pth'
         # model.load_state_dict(torch.load(s))
-        # _, test_loader = pblm.mnist_loaders(32, shuffle_test=True)
-        # test_loader = [tl for i,tl in enumerate(test_loader) if i < 50]
+        _, test_loader = pblm.mnist_loaders(8, shuffle_test=True)
+        test_loader = [tl for i,tl in enumerate(test_loader) if i < 50]
     elif args.model == 'resnet': 
         model = pblm.mnist_model_resnet().cuda()
     elif args.model == 'bn': 
@@ -69,6 +70,8 @@ if __name__ == "__main__":
     # pblm.init_scale(model, X[:1], args.starting_epsilon)
 
     kwargs = pblm.args2kwargs(args, X=X)
+    best_err = 1
+    best_state_dict = model.state_dict()
 
     if args.eval is not None: 
         try: 
@@ -95,7 +98,7 @@ if __name__ == "__main__":
             lr_scheduler.step(epoch=t)
             if args.method == 'baseline': 
                 train_baseline(train_loader, model, opt, t, train_log, args.verbose)
-                evaluate_baseline(test_loader, model, t, test_log,
+                err = evaluate_baseline(test_loader, model, t, test_log,
                    args.verbose)
             elif args.method=='madry':
                 train_madry(train_loader, model, args.epsilon, opt, t, train_log,
@@ -110,8 +113,19 @@ if __name__ == "__main__":
                     epsilon = args.epsilon
                 train_robust(train_loader, model, opt, epsilon, t, train_log, 
                     args.verbose, l1_type=args.l1_train, **kwargs)
-                evaluate_robust(test_loader, model, args.epsilon, t,
+                err = evaluate_robust(test_loader, model, args.epsilon, t,
                    test_log,
                    args.verbose, l1_type=args.l1_test, **kwargs)
-
-            torch.save(model.state_dict(), args.prefix + "_model.pth")
+            
+            if err < best_err: 
+                best_state_dict = model.state_dict()
+                best_err = err
+                
+            torch.save({ 
+                'state_dict': model.state_dict(),
+                'err' : err,
+                'best_state_dict' : best_state_dict, 
+                'best_err' : best_err,
+                'epoch' : t
+                }, args.prefix + "_checkpoint.pth")
+            # torch.save(model.state_dict(), args.prefix + "_model.pth")
