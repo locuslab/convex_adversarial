@@ -1,6 +1,6 @@
 import waitGPU
-# import setGPU
-waitGPU.wait(utilization=50, available_memory=14000, interval=60)
+import setGPU
+# waitGPU.wait(utilization=50, available_memory=14000, interval=60)
 # waitGPU.wait(gpu_ids=[1,3], utilization=20, available_memory=10000, interval=60)
 
 import torch
