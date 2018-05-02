@@ -103,7 +103,7 @@ class DualLinear():
         if not isinstance(layer, nn.Linear):
             raise ValueError("Expected nn.Linear input.")
         self.layer = layer
-        self.bias = [Aff.full_bias(layer, out_features)]
+        self.bias = [Aff.full_bias(layer, out_features[1:])]
 
     def apply(self, dual_layer): 
         self.bias.append(dual_layer.affine(*self.bias))
@@ -148,7 +148,7 @@ class DualConv2d(DualLinear):
         if not isinstance(layer, nn.Conv2d):
             raise ValueError("Expected nn.Conv2d input.")
         self.layer = layer
-        self.bias = [Aff.full_bias(layer, out_features).contiguous()]
+        self.bias = [Aff.full_bias(layer, out_features[1:]).contiguous()]
 
     def affine(self, *xs): 
         x = xs[-1]
@@ -376,36 +376,46 @@ class DualDense():
 
 
 class DualBatchNorm2d(): 
-    def __init__(self, layer, minibatch): 
+    def __init__(self, layer, minibatch, out_features): 
         if layer.training: 
             minibatch = minibatch.data.transpose(0,1).contiguous()
             minibatch = minibatch.view(minibatch.size(0), -1)
-            self.mu = minibatch.mean(1)
-            self.sigma = minibatch.std(1)
+            mu = minibatch.mean(1)
+            var = minibatch.var(1)
         else: 
-            self.mu = layer.running_mean
-            self.var = layer.running_var
+            mu = layer.running_mean
+            var = layer.running_var
         
-        self.weight = layer.weight
-        self.bias = layer.bias
+        eps = layer.eps
 
-        self.eps = layer.eps
-        assert False
+        weight = layer.weight
+        bias = layer.bias
+        denom = torch.sqrt(var + eps)
+
+        self.D = (weight/Variable(denom)).unsqueeze(1).unsqueeze(2)
+        self.ds = [((bias - Variable(mu/denom)).unsqueeze(1).unsqueeze
+            (2)).expand(out_features[1:]).contiguous()]
+        
 
     def affine(self, *xs): 
-        return xs[-1]
+        x = xs[-1]
+        return self.D*x
 
     def affine_transpose(self, *xs): 
-        return xs[-1]
+        return self.affine(*xs)
 
     def apply(self, dual_layer): 
-        pass
+        self.ds.append(dual_layer.affine(*self.ds))
 
     def fval(self, nu=None, nu_prev=None): 
+
         if nu is None: 
-            return 0,0
+            d = self.ds[-1]
+            return d, d
         else:
-            return 0
+            d = self.ds[0].view(-1)
+            nu = nu.view(nu.size(0), nu.size(1), -1)
+            return -nu.matmul(d)
 
 class DualSequential(): 
     def affine(self, *xs): 
@@ -493,7 +503,7 @@ class DualNetBounds:
                 assert isinstance(dense_t[i], Dense)
                 dual_layer = DualDense(layer, dense_t[i], dual_net, out_f)
             elif isinstance(layer, nn.BatchNorm2d):
-                dual_layer = DualBatchNorm2d(layer, zs[i])
+                dual_layer = DualBatchNorm2d(layer, zs[i], out_f)
             else:
                 print(layer)
                 raise ValueError("No module for layer {}".format(str(layer.__class__.__name__)))
@@ -564,7 +574,6 @@ class DualNetBounds:
         # print(sum(l.fval(nu=n, nu_prev=nprev) 
         #     for l,nprev,n in zip(dual_net, nu[:-1],nu[1:])))
         # assert False
-
         return sum(l.fval(nu=n, nu_prev=nprev) 
             for l,nprev,n in zip(dual_net, nu[:-1],nu[1:]))
 
