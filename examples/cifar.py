@@ -1,5 +1,6 @@
-import setGPU
-# waitGPU.wait(utilization=20, available_memory=10000, interval=60)
+import waitGPU
+# import setGPU
+waitGPU.wait(utilization=20, available_memory=15000, interval=60)
 # waitGPU.wait(gpu_ids=[1,3], utilization=20, available_memory=10000, interval=60)
 
 import torch
@@ -19,7 +20,7 @@ import problems as pblm
 from trainer import *
 
 if __name__ == "__main__": 
-    args = pblm.argparser(epsilon = 0.031, batch_size = 8)
+    args = pblm.argparser(epsilon = 0.031, batch_size = 32)
     print("saving file to {}".format(args.prefix))
     setproctitle.setproctitle(args.prefix)
 
@@ -36,12 +37,12 @@ if __name__ == "__main__":
     torch.cuda.manual_seed(args.seed)
 
 
-    if args.vgg: 
+    if args.model == 'vgg': 
         # raise ValueError
         model = pblm.cifar_model_vgg().cuda()
         _, test_loader = pblm.cifar_loaders(1, )
         test_loader = [tl for i,tl in enumerate(test_loader) if i < 200]
-    elif args.resnet: 
+    elif args.model == 'resnet': 
         model = pblm.cifar_model_resnet().cuda()
         #model = pblm.mnist_model_large().cuda()
     else: 
@@ -76,7 +77,7 @@ if __name__ == "__main__":
                                    args.epochs//2)
         for t in range(starting_epoch, args.epochs):
             lr_scheduler.step(epoch=t)
-            if args.baseline: 
+            if args.method == 'baseline': 
                 train_baseline(train_loader, model, opt, t, train_log, args.verbose)
                 err = evaluate_baseline(test_loader, model, t, test_log, args.verbose)
             else:
@@ -85,8 +86,8 @@ if __name__ == "__main__":
                     epsilon = float(eps_schedule[t])
                 else:
                     epsilon = args.epsilon
-                train_robust(train_loader, model, opt, epsilon, t, train_log, 
-                    args.verbose, l1_type=args.l1_train, **kwargs)
+                # train_robust(train_loader, model, opt, epsilon, t, train_log, 
+                #     args.verbose, l1_type=args.l1_train, **kwargs)
                 err = evaluate_robust(test_loader, model, args.epsilon, t, test_log,
                    args.verbose, l1_type=args.l1_test, **kwargs)
             print('Epoch {}: {} err'.format(t, err))
