@@ -124,6 +124,7 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose, **kwargs):
           'Error {error.avg:.3f}'
           .format(rerror=robust_errors, error=errors))
     torch.cuda.empty_cache()
+    return robust_errors.avg
 
 def train_baseline(loader, model, opt, epoch, log, verbose):
     batch_time = AverageMeter()
@@ -148,7 +149,7 @@ def train_baseline(loader, model, opt, epoch, log, verbose):
 
         batch_time.update(time.time()-end)
         end = time.time()
-        losses.update(ce.data, X.size(0))
+        losses.update(ce.data[0], X.size(0))
         errors.update(err, X.size(0))
 
         print(epoch, i, ce.data[0], err, file=log)
@@ -198,6 +199,7 @@ def evaluate_baseline(loader, model, epoch, log, verbose):
 
     print(' * Error {error.avg:.3f}'
           .format(error=errors))
+    return errors.avg
 
 
 

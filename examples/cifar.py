@@ -1,6 +1,6 @@
 import waitGPU
 # import setGPU
-waitGPU.wait(utilization=20, available_memory=15000, interval=60)
+waitGPU.wait(utilization=20, available_memory=10000, interval=60)
 # waitGPU.wait(gpu_ids=[1,3], utilization=20, available_memory=10000, interval=60)
 
 import torch
@@ -86,8 +86,8 @@ if __name__ == "__main__":
                     epsilon = float(eps_schedule[t])
                 else:
                     epsilon = args.epsilon
-                # train_robust(train_loader, model, opt, epsilon, t, train_log, 
-                #     args.verbose, l1_type=args.l1_train, **kwargs)
+                train_robust(train_loader, model, opt, epsilon, t, train_log, 
+                    args.verbose, l1_type=args.l1_train, **kwargs)
                 err = evaluate_robust(test_loader, model, args.epsilon, t, test_log,
                    args.verbose, l1_type=args.l1_test, **kwargs)
             print('Epoch {}: {} err'.format(t, err))
