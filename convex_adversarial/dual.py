@@ -385,6 +385,9 @@ class DualBatchNorm2d():
         else: 
             mu = layer.running_mean
             var = layer.running_var
+        # mu = layer.running_mean
+        # var = layer.running_var
+
         
         eps = layer.eps
 
@@ -577,14 +580,35 @@ class DualNetBounds:
         return sum(l.fval(nu=n, nu_prev=nprev) 
             for l,nprev,n in zip(dual_net, nu[:-1],nu[1:]))
 
+class RobustBounds(nn.Module): 
+    def __init__(self, net, epsilon, **kwargs): 
+        super(RobustBounds, self).__init__()
+        self.net = net
+        self.epsilon = epsilon
+        self.kwargs = kwargs
+
+    def forward(self, X,y): 
+        num_classes = self.net[-1].out_features
+        dual = DualNetBounds(self.net, X, self.epsilon, **self.kwargs)
+        c = Variable(torch.eye(num_classes).type_as(X.data)[y.data].unsqueeze(1) - torch.eye(num_classes).type_as(X.data).unsqueeze(0))
+        if X.is_cuda:
+            c = c.cuda()
+        f = -dual.g(c)
+        return f
+
 def robust_loss(net, epsilon, X, y, 
                 size_average=True, **kwargs):
-    num_classes = net[-1].out_features
-    dual = DualNetBounds(net, X, epsilon, **kwargs)
-    c = Variable(torch.eye(num_classes).type_as(X.data)[y.data].unsqueeze(1) - torch.eye(num_classes).type_as(X.data).unsqueeze(0))
-    if X.is_cuda:
-        c = c.cuda()
-    f = -dual.g(c)
+    # num_classes = net[-1].out_features
+    # dual = DualNetBounds(net, X, epsilon, **kwargs)
+    # c = Variable(torch.eye(num_classes).type_as(X.data)[y.data].unsqueeze(1) - torch.eye(num_classes).type_as(X.data).unsqueeze(0))
+    # if X.is_cuda:
+    #     c = c.cuda()
+    # f = -dual.g(c)
+    # if device_ids is None: 
+    #     f = RobustBounds(net, epsilon, **kwargs)(X,y)
+    # else: 
+    f = nn.DataParallel(RobustBounds(net, epsilon, **kwargs),
+                        device_ids=[0,1,2,3])(X,y)
     err = (f.data.max(1)[1] != y.data)
     if size_average: 
         err = err.sum()/X.size(0)
