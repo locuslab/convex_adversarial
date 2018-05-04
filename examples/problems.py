@@ -62,10 +62,10 @@ def mnist_model():
 
 def mnist_model_bn(): 
     model = nn.Sequential(
-        nn.Conv2d(1, 16, 4, stride=2, padding=1),
+        nn.Conv2d(1, 16, 4, stride=2, padding=1, bias=False),
         nn.BatchNorm2d(16), 
         nn.ReLU(),
-        nn.Conv2d(16, 32, 4, stride=2, padding=1),
+        nn.Conv2d(16, 32, 4, stride=2, padding=1, bias=False),
         nn.BatchNorm2d(32), 
         nn.ReLU(),
         Flatten(),
@@ -113,24 +113,24 @@ def mnist_model_resnet():
     return model
 
 
-def mnist_model_resnet_bn(): 
-    model = DenseSequential(
-        nn.Conv2d(1, 16, 4, stride=2, padding=1),
-        nn.ReLU(),
-        Dense(nn.Conv2d(16, 32, 4, stride=2, padding=1)),
-        nn.BatchNorm2d(32), 
-        nn.ReLU(),
-        Dense(nn.Conv2d(16, 32, 1, stride=2, padding=0), 
-              None, 
-              nn.Conv2d(32, 32, 3, stride=1, padding=1)),
-        nn.BatchNorm2d(32), 
-        nn.ReLU(),
-        Flatten(),
-        nn.Linear(32*7*7,100),
-        nn.ReLU(),
-        nn.Linear(100, 10)
-    )
-    return model
+# def mnist_model_resnet_bn(): 
+#     model = DenseSequential(
+#         nn.Conv2d(1, 16, 4, stride=2, padding=1),
+#         nn.ReLU(),
+#         Dense(nn.Conv2d(16, 32, 4, stride=2, padding=1, bias=False)),
+#         nn.BatchNorm2d(32), 
+#         nn.ReLU(),
+#         Dense(nn.Conv2d(16, 32, 1, stride=2, padding=0, bias=False), 
+#               None, 
+#               nn.Conv2d(32, 32, 3, stride=1, padding=1, bias=False)),
+#         nn.BatchNorm2d(32), 
+#         nn.ReLU(),
+#         Flatten(),
+#         nn.Linear(32*7*7,100),
+#         nn.ReLU(),
+#         nn.Linear(100, 10)
+#     )
+#     return model
 
 
 # def mnist_model_resnet(): 
@@ -362,12 +362,12 @@ def mnist_model_resnet_bn():
     model = DenseSequential(
         nn.Conv2d(1, 16, 4, stride=2, padding=1),
         nn.ReLU(),
-        Dense(nn.Conv2d(16, 32, 4, stride=2, padding=1)),
+        Dense(nn.Conv2d(16, 32, 4, stride=2, padding=1, bias=False)),
         nn.BatchNorm2d(32), 
         nn.ReLU(),
-        Dense(nn.Conv2d(16, 32, 1, stride=2, padding=0), 
+        Dense(nn.Conv2d(16, 32, 1, stride=2, padding=0, bias=False), 
               None, 
-              nn.Conv2d(32, 32, 3, stride=1, padding=1)),
+              nn.Conv2d(32, 32, 3, stride=1, padding=1, bias=False)),
         nn.BatchNorm2d(32), 
         nn.ReLU(),
         Flatten(),
