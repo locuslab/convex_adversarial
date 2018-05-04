@@ -473,7 +473,10 @@ class DualNetBounds:
         m : number of probabilistic bounds to take the max over
         """
         # need to change that if no batchnorm, can pass just a single example
-        zs = [Variable(X.data, volatile=True)]
+        if True: 
+            zs = [Variable(X.data[:1], volatile=True)]
+        else:
+            zs = [Variable(X.data, volatile=True)]
         nf = [zs[0].size()]
         for l in net: 
             if isinstance(l, Dense): 
