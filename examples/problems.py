@@ -378,26 +378,26 @@ def mnist_model_resnet_bn():
     return model
 
 
-def cifar_model_resnet(N = 5): 
+def cifar_model_resnet(N = 5, factor=10): 
     def  block(in_filters, out_filters, k, first_stride): 
         return [
-            Dense(nn.Conv2d(in_filters, out_filters, k stride=first_stride, padding=1)), 
+            Dense(nn.Conv2d(in_filters, out_filters, k, stride=first_stride, padding=1)), 
             nn.ReLU(), 
-            Dense(nn.Conv2d(in_filters, out_filters, 1), 
+            Dense(nn.Conv2d(in_filters, out_filters, 1, stride=first_stride), 
                   None, 
                   nn.Conv2d(out_filters, out_filters, k, stride=1, padding=1)), 
             nn.ReLU()
         ]
-    conv1 = [nn.Conv2d(1,16,3,stride=1,padding=1), nn.ReLU()]
-    conv2 = []
-    for _ in range(N): 
-        conv2.extend(block(16,16,3,1))
-    conv3 = block(16,32,3,2)
+    conv1 = [nn.Conv2d(3,16,3,stride=1,padding=1), nn.ReLU()]
+    conv2 = block(16,16*factor,3,1)
     for _ in range(N-1): 
-        conv3.extend(block(32,32,3,1))
-    conv4 = block(32,64,3,2)
+        conv2.extend(block(16*factor,16*factor,3,1))
+    conv3 = block(16*factor,32*factor,3,2)
     for _ in range(N-1): 
-        conv4.extend(block(64,64,3,1))
+        conv3.extend(block(32*factor,32*factor,3,1))
+    conv4 = block(32*factor,64*factor,3,2)
+    for _ in range(N-1): 
+        conv4.extend(block(64*factor,64*factor,3,1))
     layers = (
         conv1 + 
         conv2 + 
@@ -408,9 +408,10 @@ def cifar_model_resnet(N = 5):
         nn.ReLU(), 
         nn.Linear(1000, 10)]
         )
-    model = nn.DenseSequential(
+    model = DenseSequential(
         *layers
     )
+    # print(model)
     for m in model.modules():
         if isinstance(m, nn.Conv2d):
             n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
