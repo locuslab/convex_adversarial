@@ -341,21 +341,43 @@ class DualDense():
                 raise ValueError("Don't know how to parse dense structure")
             self.duals.append(dual_layer)
 
-            if i > 0 and W is not None: 
-                net[-i].dual_ts = [dual_layer] + [None]*(i-len(net[-i].dual_ts)) + net[-i].dual_ts
-        
-
+            if i < len(dense.Ws)-1 and W is not None: 
+                idx = i-len(dense.Ws)+1
+                # dual_ts needs to be len(dense.Ws)-i long
+                # print(idx, len(dense.Ws)-i, 'adding ', (len(dense.Ws)-i-len(net[idx].dual_ts)-1))
+                net[idx].dual_ts = [dual_layer] + [None]*(len(dense.Ws)-i-len(net[idx].dual_ts)-1) + net[idx].dual_ts
+        # assert False
         self.dual_ts = [self.duals[-1]]
+
 
     def affine(self, *xs): 
         duals = self.duals[-min(len(xs),len(self.duals)):]
-
+        # print("*"*80)
+        # for i,W in zip(range(-len(duals) + len(xs), len(xs)),
+        #         duals):
+        #     print(i, len(xs))
+        # print("*"*80)
+        # for i in range(-len(duals) + len(xs), len(xs)):
+        #     print(i, len())
         return sum(W.affine(*xs[:i+1]) 
             for i,W in zip(range(-len(duals) + len(xs), len(xs)),
                 duals) if W is not None)
 
     def affine_transpose(self, *xs): 
         dual_ts = self.dual_ts[-min(len(xs),len(self.dual_ts)):]
+        # print(dual_ts, len(xs), len(self.dual_ts)) 
+        # print("#"*80)
+        #     if W is not None: 
+        #         print(i, W.affine_transpose(*xs[:i+1]).size(), W.layer)
+        #     else: 
+        #         print(i, W, xs[i+1].size())
+        # print("$"*80)
+        # for i,x in enumerate(xs): 
+        #     print(i,x.size())
+        # print("*"*80)
+        # print(len(dual_ts), len(xs))
+        # for i in range(-len(dual_ts) + len(xs), len(xs)): 
+        #     print(len(xs[:i+1]), len(xs))
         return sum(W.affine_transpose(*xs[:i+1]) 
             for i,W in zip(range(-len(dual_ts) + len(xs), len(xs)),
                 dual_ts) if W is not None)
@@ -396,7 +418,7 @@ class DualBatchNorm2d():
         denom = torch.sqrt(var + eps)
 
         self.D = (weight/Variable(denom)).unsqueeze(1).unsqueeze(2)
-        self.ds = [((bias - Variable(mu/denom)).unsqueeze(1).unsqueeze
+        self.ds = [((bias - weight*Variable(mu/denom)).unsqueeze(1).unsqueeze
             (2)).expand(out_features[1:]).contiguous()]
         
 
@@ -561,13 +583,19 @@ class DualNetBounds:
                 # print(projection_layer.fval()[0].data - extra_layer.fval()[0].data)
                 # assert False
         self.dual_net = dual_net
+        # print("*"*80)
+        # for dn in dual_net: 
+        #     if isinstance(dn, DualDense): 
+        #         print(dn.dual_ts)
+        # print("*"*80)
+        # print(dual_net)
         return 
         
     def g(self, c):
         nu = [-c]
         nu.append(self.last_layer.affine_transpose(nu[0]))
         for l in reversed(self.dual_net[1:]): 
-            nu.append(l.affine_transpose(nu[-1]))
+            nu.append(l.affine_transpose(*nu))
         dual_net = self.dual_net + [self.last_layer]
         
         nu.append(None)
@@ -576,6 +604,7 @@ class DualNetBounds:
 
         # print(sum(l.fval(nu=n, nu_prev=nprev) 
         #     for l,nprev,n in zip(dual_net, nu[:-1],nu[1:])))
+        # assert False
         # assert False
         return sum(l.fval(nu=n, nu_prev=nprev) 
             for l,nprev,n in zip(dual_net, nu[:-1],nu[1:]))
@@ -597,7 +626,7 @@ class RobustBounds(nn.Module):
         return f
 
 def robust_loss(net, epsilon, X, y, 
-                size_average=True, **kwargs):
+                size_average=True, device_ids=None, **kwargs):
     # num_classes = net[-1].out_features
     # dual = DualNetBounds(net, X, epsilon, **kwargs)
     # c = Variable(torch.eye(num_classes).type_as(X.data)[y.data].unsqueeze(1) - torch.eye(num_classes).type_as(X.data).unsqueeze(0))
@@ -608,7 +637,7 @@ def robust_loss(net, epsilon, X, y,
     #     f = RobustBounds(net, epsilon, **kwargs)(X,y)
     # else: 
     f = nn.DataParallel(RobustBounds(net, epsilon, **kwargs),
-                        device_ids=[0,1,2,3])(X,y)
+                        device_ids=None)(X,y)
     err = (f.data.max(1)[1] != y.data)
     if size_average: 
         err = err.sum()/X.size(0)
