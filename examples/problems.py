@@ -379,32 +379,40 @@ def mnist_model_resnet_bn():
 
 
 def cifar_model_resnet(N = 5, factor=10): 
-    def  block(in_filters, out_filters, k, first_stride): 
+    def  block(in_filters, out_filters, k): 
+        if in_filters == out_filters: 
+            k_first = 3
+            skip_stride = 1
+            k_skip = 1
+        else: 
+            k_first = 4
+            skip_stride = 2
+            k_skip = 2
         return [
-            Dense(nn.Conv2d(in_filters, out_filters, k, stride=first_stride, padding=1)), 
+            Dense(nn.Conv2d(in_filters, out_filters, k_first, stride=skip_stride, padding=1)), 
             nn.ReLU(), 
-            Dense(nn.Conv2d(in_filters, out_filters, 1, stride=first_stride), 
+            Dense(nn.Conv2d(in_filters, out_filters, k_skip, stride=skip_stride, padding=0), 
                   None, 
                   nn.Conv2d(out_filters, out_filters, k, stride=1, padding=1)), 
             nn.ReLU()
         ]
     conv1 = [nn.Conv2d(3,16,3,stride=1,padding=1), nn.ReLU()]
-    conv2 = block(16,16*factor,3,1)
+    conv2 = block(16,16*factor,3)
+    for _ in range(N): 
+        conv2.extend(block(16*factor,16*factor,3))
+    conv3 = block(16*factor,32*factor,3)
     for _ in range(N-1): 
-        conv2.extend(block(16*factor,16*factor,3,1))
-    conv3 = block(16*factor,32*factor,3,2)
+        conv3.extend(block(32*factor,32*factor,3))
+    conv4 = block(32*factor,64*factor,3)
     for _ in range(N-1): 
-        conv3.extend(block(32*factor,32*factor,3,1))
-    conv4 = block(32*factor,64*factor,3,2)
-    for _ in range(N-1): 
-        conv4.extend(block(64*factor,64*factor,3,1))
+        conv4.extend(block(64*factor,64*factor,3))
     layers = (
         conv1 + 
         conv2 + 
         conv3 + 
         conv4 +
         [Flatten(),
-        nn.Linear(64*8*8,1000), 
+        nn.Linear(64*factor*8*8,1000), 
         nn.ReLU(), 
         nn.Linear(1000, 10)]
         )

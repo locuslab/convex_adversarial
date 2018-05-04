@@ -1,6 +1,6 @@
-import waitGPU
+# import waitGPU
 # import setGPU
-waitGPU.wait(utilization=20, available_memory=10000, interval=60)
+# waitGPU.wait(utilization=20, available_memory=10000, interval=60)
 # waitGPU.wait(gpu_ids=[1,3], utilization=20, available_memory=10000, interval=60)
 
 import torch
@@ -43,7 +43,7 @@ if __name__ == "__main__":
         _, test_loader = pblm.cifar_loaders(1, )
         test_loader = [tl for i,tl in enumerate(test_loader) if i < 200]
     elif args.model == 'resnet': 
-        model = pblm.cifar_model_resnet().cuda()
+        model = pblm.cifar_model_resnet(N=1, factor=1).cuda()
         #model = pblm.mnist_model_large().cuda()
 
     elif args.model == 'wide': 
