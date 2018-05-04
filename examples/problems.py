@@ -101,9 +101,29 @@ def mnist_model_resnet():
         nn.ReLU(),
         Dense(nn.Conv2d(16, 32, 4, stride=2, padding=1)),
         nn.ReLU(),
+        Dense(nn.Conv2d(16, 32, 2, stride=2, padding=0), 
+              None, 
+              nn.Conv2d(32, 32, 3, stride=1, padding=1)),
+        nn.ReLU(),
+        Flatten(),
+        nn.Linear(32*7*7,100),
+        nn.ReLU(),
+        nn.Linear(100, 10)
+    )
+    return model
+
+
+def mnist_model_resnet_bn(): 
+    model = DenseSequential(
+        nn.Conv2d(1, 16, 4, stride=2, padding=1),
+        nn.ReLU(),
+        Dense(nn.Conv2d(16, 32, 4, stride=2, padding=1)),
+        nn.BatchNorm2d(32), 
+        nn.ReLU(),
         Dense(nn.Conv2d(16, 32, 1, stride=2, padding=0), 
               None, 
               nn.Conv2d(32, 32, 3, stride=1, padding=1)),
+        nn.BatchNorm2d(32), 
         nn.ReLU(),
         Flatten(),
         nn.Linear(32*7*7,100),
@@ -257,6 +277,32 @@ def cifar_model():
         nn.ReLU(),
         nn.Linear(100, 10)
     )
+    for m in model.modules():
+        if isinstance(m, nn.Conv2d):
+            n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+            m.weight.data.normal_(0, math.sqrt(2. / n))
+            m.bias.data.zero_()
+    return model
+
+
+def cifar_model_wide(): 
+    model = nn.Sequential(
+        nn.Conv2d(3, 16, 4, stride=2, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(16, 160, 4, stride=2, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(160, 320, 4, stride=2, padding=1),
+        nn.ReLU(),
+        Flatten(),
+        nn.Linear(320*4*4,1000),
+        nn.ReLU(),
+        nn.Linear(1000, 10)
+    )
+    for m in model.modules():
+        if isinstance(m, nn.Conv2d):
+            n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+            m.weight.data.normal_(0, math.sqrt(2. / n))
+            m.bias.data.zero_()
     return model
 
 def cifar_model_vgg(): 
