@@ -103,17 +103,27 @@ class DualLinear():
         if not isinstance(layer, nn.Linear):
             raise ValueError("Expected nn.Linear input.")
         self.layer = layer
-        self.bias = [Aff.full_bias(layer, out_features[1:])]
+        if layer.bias is None: 
+            self.bias = None
+        else: 
+            self.bias = [Aff.full_bias(layer, out_features[1:])]
 
     def apply(self, dual_layer): 
-        self.bias.append(dual_layer.affine(*self.bias))
+        if self.bias is not None: 
+            self.bias.append(dual_layer.affine(*self.bias))
 
     def fval(self, nu=None, nu_prev=None): 
         if nu is None: 
-            return self.bias[-1], self.bias[-1]
+            if self.bias is None: 
+                return 0,0
+            else: 
+                return self.bias[-1], self.bias[-1]
         else:
-            nu = nu.view(nu.size(0), nu.size(1), -1)
-            return -nu.matmul(self.bias[0].view(-1))
+            if self.bias is None: 
+                return 0
+            else:
+                nu = nu.view(nu.size(0), nu.size(1), -1)
+                return -nu.matmul(self.bias[0].view(-1))
 
     def affine(self, *xs): 
         x = xs[-1]
@@ -148,7 +158,10 @@ class DualConv2d(DualLinear):
         if not isinstance(layer, nn.Conv2d):
             raise ValueError("Expected nn.Conv2d input.")
         self.layer = layer
-        self.bias = [Aff.full_bias(layer, out_features[1:]).contiguous()]
+        if layer.bias is None: 
+            self.bias = None
+        else: 
+            self.bias = [Aff.full_bias(layer, out_features[1:]).contiguous()]
 
     def affine(self, *xs): 
         x = xs[-1]
@@ -460,7 +473,7 @@ class DualSequential():
 
 class DualNetBounds: 
     def __init__(self, net, X, epsilon, alpha_grad=False, scatter_grad=False, 
-                 l1_proj=None, l1_eps=None, m=None, 
+                 l1_proj=None, l1_eps=None, m=None, batchnorm=False,
                  l1_type='exact'):
         """ 
         net : ReLU network
@@ -473,10 +486,10 @@ class DualNetBounds:
         m : number of probabilistic bounds to take the max over
         """
         # need to change that if no batchnorm, can pass just a single example
-        if True: 
-            zs = [Variable(X.data[:1], volatile=True)]
-        else:
-            zs = [Variable(X.data, volatile=True)]
+        # if not batchnorm: 
+        #     zs = [Variable(X.data[:1], volatile=True)]
+        # else:
+        zs = [Variable(X.data, volatile=True)]
         nf = [zs[0].size()]
         for l in net: 
             if isinstance(l, Dense): 
