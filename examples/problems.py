@@ -11,6 +11,7 @@ import argparse
 from convex_adversarial import epsilon_from_model, DualNetBounds
 from convex_adversarial import Dense, DenseSequential
 import math
+import os
 
 def init_scale(model, X, epsilon): 
     dual = DualNetBounds(model, X, epsilon)
@@ -461,6 +462,7 @@ def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3,
     parser.add_argument('--weight_decay', type=float, default=weight_decay)
     parser.add_argument('--model', default=None)
     parser.add_argument('--method', default=None)
+    parser.add_argument('--cuda_ids', default=None)
 
     
     args = parser.parse_args()
@@ -484,7 +486,7 @@ def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3,
         else:
             banned = ['alpha_grad', 'scatter_grad', 'verbose', 'prefix',
                       'resume', 'baseline', 'eval', 
-                      'method', 'model']
+                      'method', 'model', 'cuda_ids']
             if args.method == 'baseline':
                 banned += ['epsilon', 'starting_epsilon', 'l1_test', 'l1_train', 'm', 'l1_proj']
             if args.opt == 'adam': 
@@ -496,6 +498,9 @@ def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3,
                     args.prefix += '_' + arg + '_' +str(getattr(args, arg))
     else: 
         args.prefix = 'temporary'
+
+    if args.cuda_ids is not None: 
+        os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda_ids
 
     return args
 
