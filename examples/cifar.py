@@ -60,7 +60,6 @@ if __name__ == "__main__":
 
     kwargs = pblm.args2kwargs(args)
     best_err = 1
-    best_state_dict = model.state_dict()
 
     if args.eval is not None: 
         try: 
@@ -96,13 +95,15 @@ if __name__ == "__main__":
             print('Epoch {}: {} err'.format(t, err))
             
             if err < best_err: 
-                best_state_dict = model.state_dict()
                 best_err = err
+                torch.save({
+                    'state_dict' : model.state_dict, 
+                    'err' : best_err,
+                    'epoch' : t
+                    }, args.prefix + "_best.pth")
                 
             torch.save({ 
                 'state_dict': model.state_dict(),
                 'err' : err,
-                'best_state_dict' : best_state_dict, 
-                'best_err' : best_err,
                 'epoch' : t
                 }, args.prefix + "_checkpoint.pth")

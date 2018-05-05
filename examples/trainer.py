@@ -38,6 +38,10 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
                                              **kwargs)
         opt.zero_grad()
         robust_ce.backward()
+
+        for p in model.parameters(): 
+            p.grad.data.clamp_(min=-10, max=10)
+
         opt.step()
 
         # measure accuracy and record loss
