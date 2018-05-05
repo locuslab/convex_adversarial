@@ -500,6 +500,7 @@ def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3,
         args.prefix = 'temporary'
 
     if args.cuda_ids is not None: 
+        print('Setting CUDA_VISIBLE_DEVICES to {}'.format(args.cuda_ids))
         os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda_ids
 
     return args
