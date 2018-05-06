@@ -76,22 +76,49 @@ def mnist_model_bn():
     )
     return model
 
-def mnist_model_double(): 
+def mnist_model_wide(k): 
     model = nn.Sequential(
-        nn.Conv2d(1, 32, 4, stride=2, padding=1),
+        nn.Conv2d(1, 4*k, 4, stride=2, padding=1),
         nn.ReLU(),
-        nn.Conv2d(32, 64, 4, stride=2, padding=1),
+        nn.Conv2d(4*k, 8*k, 4, stride=2, padding=1),
         nn.ReLU(),
         Flatten(),
-        nn.Linear(64*7*7,100),
+        nn.Linear(8*k*7*7,k*128),
+        nn.ReLU(),
+        nn.Linear(k*128, 10)
+    )
+    return model
+
+
+def mnist_model_deep(k): 
+    def group(inf, outf, N): 
+        if N == 1: 
+            conv = [nn.Conv2d(inf, outf, 4, stride=2, padding=1), 
+                         nn.ReLU()]
+        else: 
+            conv = [nn.Conv2d(inf, outf, 3, stride=1, padding=1), 
+                         nn.ReLU()]
+            for _ in range(1,N-1):
+                conv.append(nn.Conv2d(outf, outf, 3, stride=1, padding=1))
+                conv.append(nn.ReLU())
+            conv.append(nn.Conv2d(outf, outf, 4, stride=2, padding=1))
+            conv.append(nn.ReLU())
+        return conv
+
+    n1 = 8
+    n2 = 16
+    conv1 = group(1, n1, k)
+    conv2 = group(n1, n2, k)
+
+
+    model = nn.Sequential(
+        *conv1, 
+        *conv2,
+        Flatten(),
+        nn.Linear(n2*7*7,100),
         nn.ReLU(),
         nn.Linear(100, 10)
     )
-    for m in model.modules():
-        if isinstance(m, nn.Conv2d):
-            n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-            m.weight.data.normal_(0, math.sqrt(2. / n))
-            m.bias.data.zero_()
     return model
 
 
@@ -461,8 +488,10 @@ def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3,
     parser.add_argument('--momentum', type=float, default=momentum)
     parser.add_argument('--weight_decay', type=float, default=weight_decay)
     parser.add_argument('--model', default=None)
+    parser.add_argument('--model_factor', type=int, default=8)
     parser.add_argument('--method', default=None)
     parser.add_argument('--cuda_ids', default=None)
+    parser.add_argument('--schedule_length', type=int, default=10)
 
     
     args = parser.parse_args()
@@ -488,20 +517,34 @@ def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3,
                       'resume', 'baseline', 'eval', 
                       'method', 'model', 'cuda_ids']
             if args.method == 'baseline':
-                banned += ['epsilon', 'starting_epsilon', 'l1_test', 'l1_train', 'm', 'l1_proj']
+                banned += ['epsilon', 'starting_epsilon', 'schedule_length', 
+                           'l1_test', 'l1_train', 'm', 'l1_proj']
+
+            # if not using adam, ignore momentum and weight decay
             if args.opt == 'adam': 
                 banned += ['momentum', 'weight_decay']
+
             if args.m == 1: 
-                banned += 'm'
+                banned += ['m']
+
+            # if not using a model that uses model_factor, 
+            # ignore model_factor
+            if args.model not in ['wide', 'deep']: 
+                banned += 'model_factor'
+
             for arg in sorted(vars(args)): 
                 if arg not in banned and getattr(args,arg) is not None: 
                     args.prefix += '_' + arg + '_' +str(getattr(args, arg))
+        if args.schedule_length > args.epochs: 
+            raise ValueError('Schedule length for epsilon ({}) is greater than '
+                             'number of epochs ({})'.format(args.schedule_length, args.epochs))
     else: 
         args.prefix = 'temporary'
 
     if args.cuda_ids is not None: 
         print('Setting CUDA_VISIBLE_DEVICES to {}'.format(args.cuda_ids))
         os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda_ids
+
 
     return args
 

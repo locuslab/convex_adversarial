@@ -22,7 +22,7 @@ import math
 import numpy as np
 
 if __name__ == "__main__": 
-    args = pblm.argparser(opt='adam')
+    args = pblm.argparser(opt='adam', verbose=200, starting_epsilon=0.01)
     print("saving file to {}".format(args.prefix))
     setproctitle.setproctitle(args.prefix)
     if not args.eval:
@@ -38,19 +38,27 @@ if __name__ == "__main__":
         # s = 'experiments/mnist_vgg_proj/mnist200_vgg_batch_size_50_epochs_20_epsilon_0.001_l1_proj_200_l1_test_exact_l1_train_median_lr_0.001_opt_adam_seed_0_starting_epsilon_0.0001_model.pth'
         # model.load_state_dict(torch.load(s))
         # reduce the test set
-        _, test_loader = pblm.mnist_loaders(1, shuffle_test=True)
-        test_loader = [tl for i,tl in enumerate(test_loader) if i < 200]
+        _, test_loader = pblm.mnist_loaders(1)
+        # test_loader = [tl for i,tl in enumerate(test_loader) if i < 200]
     elif args.model == 'large': 
         model = pblm.mnist_model_large().cuda()
         # s = 'experiments/mnist_gradual/mnist2_large_batch_size_8_epochs_20_epsilon_0.1_l1_test_exact_l1_train_exact_lr_0.001_opt_adam_seed_0_starting_epsilon_0.1_model.pth'
         # s = 'experiments/mnist_large_madry.pth'
         # model.load_state_dict(torch.load(s))
-        _, test_loader = pblm.mnist_loaders(8, shuffle_test=True)
-        test_loader = [tl for i,tl in enumerate(test_loader) if i < 50]
+        _, test_loader = pblm.mnist_loaders(8)
+        # test_loader = [tl for i,tl in enumerate(test_loader) if i < 50]
     elif args.model == 'resnet': 
         model = pblm.mnist_model_resnet().cuda()
     elif args.model == 'bn': 
         model = pblm.mnist_model_bn().cuda()
+    elif args.model == 'wide': 
+        print("Using wide model with model_factor={}".format(args.model_factor))
+        _, test_loader = pblm.mnist_loaders(64//args.model_factor)
+        model = pblm.mnist_model_wide(args.model_factor).cuda()
+    elif args.model == 'deep': 
+        print("Using deep model with model_factor={}".format(args.model_factor))
+        _, test_loader = pblm.mnist_loaders(64//(2**args.model_factor))
+        model = pblm.mnist_model_deep(args.model_factor).cuda()
     else: 
         model = pblm.mnist_model().cuda() 
         #model.load_state_dict(torch.load('l1_truth/mnist_nonexact_rerun_baseline_False_batch_size_50_delta_0.01_epochs_20_epsilon_0.1_l1_proj_200_l1_test_exact_l1_train_median_lr_0.001_m_10_seed_0_starting_epsilon_0.05_model.pth'))
@@ -71,7 +79,6 @@ if __name__ == "__main__":
 
     kwargs = pblm.args2kwargs(args, X=X)
     best_err = 1
-    best_state_dict = model.state_dict()
 
     if args.eval is not None: 
         try: 
@@ -91,11 +98,13 @@ if __name__ == "__main__":
         else: 
             raise ValueError("Unknown optimizer")
         lr_scheduler = optim.lr_scheduler.StepLR(opt, step_size=20, gamma=0.5)
+        # schedule epsilon over a maximum of 20 epochs
         eps_schedule = np.logspace(np.log10(args.starting_epsilon), 
                                    np.log10(args.epsilon), 
-                                   args.epochs//2)
+                                   args.schedule_length)
         for t in range(args.epochs):
-            lr_scheduler.step(epoch=t)
+            # reduce LR after epsilon schedule
+            lr_scheduler.step(epoch=max(t-len(eps_schedule), 0))
             if args.method == 'baseline': 
                 train_baseline(train_loader, model, opt, t, train_log, args.verbose)
                 err = evaluate_baseline(test_loader, model, t, test_log,
@@ -106,7 +115,7 @@ if __name__ == "__main__":
                 evaluate_madry(test_loader, model, args.epsilon, t, test_log,
                    args.verbose)
             else:
-                if t < args.epochs//2 and args.starting_epsilon is not None: 
+                if t < len(eps_schedule) and args.starting_epsilon is not None: 
                     # epsilon = args.starting_epsilon + (t/(args.epochs//2))*(args.epsilon - args.starting_epsilon)
                     epsilon = float(eps_schedule[t])
                 else:
@@ -118,14 +127,16 @@ if __name__ == "__main__":
                    args.verbose, l1_type=args.l1_test, **kwargs)
             
             if err < best_err: 
-                best_state_dict = model.state_dict()
                 best_err = err
+                torch.save({
+                    'state_dict' : model.state_dict, 
+                    'err' : best_err,
+                    'epoch' : t
+                    }, args.prefix + "_best.pth")
                 
             torch.save({ 
                 'state_dict': model.state_dict(),
                 'err' : err,
-                'best_state_dict' : best_state_dict, 
-                'best_err' : best_err,
                 'epoch' : t
                 }, args.prefix + "_checkpoint.pth")
             # torch.save(model.state_dict(), args.prefix + "_model.pth")
