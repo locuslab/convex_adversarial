@@ -68,6 +68,12 @@ class InfBall():
     def fval(self, nu=None, nu_prev=None): 
         if nu is None: 
             l1 = self.nu_1[-1].abs().sum(1)
+            # nu_1_sum = self.nu_1[-1].sum(1)
+            # zl = torch.max(self.nu_x[-1] - self.epsilon*l1, 
+            #                0.5*(-l1 - nu_1_sum))
+            # zu = torch.max(self.nu_x[-1] + self.epsilon*l1, 
+            #                0.5*(l1 - nu_1_sum))
+            # return (zl,zu)
             return (self.nu_x[-1] - self.epsilon*l1, 
                     self.nu_x[-1] + self.epsilon*l1)
         else: 
