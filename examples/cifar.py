@@ -76,14 +76,14 @@ if __name__ == "__main__":
         lr_scheduler = optim.lr_scheduler.StepLR(opt, step_size=30, gamma=0.5)
         eps_schedule = np.logspace(np.log10(args.starting_epsilon), 
                                    np.log10(args.epsilon), 
-                                   args.epochs//2)
+                                   args.schedule_length)
         for t in range(starting_epoch, args.epochs):
-            lr_scheduler.step(epoch=t)
+            lr_scheduler.step(epoch=max(t-len(eps_schedule), 0))
             if args.method == 'baseline': 
                 train_baseline(train_loader, model, opt, t, train_log, args.verbose)
                 err = evaluate_baseline(test_loader, model, t, test_log, args.verbose)
             else:
-                if t < args.epochs//2 and args.starting_epsilon is not None: 
+                if t < len(eps_schedule) and args.starting_epsilon is not None: 
                     # epsilon = args.starting_epsilon + (t/(args.epochs//2))*(args.epsilon - args.starting_epsilon)
                     epsilon = float(eps_schedule[t])
                 else:

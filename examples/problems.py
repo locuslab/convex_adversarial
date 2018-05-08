@@ -277,17 +277,18 @@ def har_500_250_100_model():
     return model
 
 def cifar_loaders(batch_size): 
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])
+    # normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+    #                                  std=[0.229, 0.224, 0.225])
     train = datasets.CIFAR10('.', train=True, download=True, 
         transform=transforms.Compose([
             transforms.RandomHorizontalFlip(),
             transforms.RandomCrop(32, 4),
             transforms.ToTensor(),
-            normalize,
+            # normalize,
         ]))
     test = datasets.CIFAR10('.', train=False, 
-        transform=transforms.Compose([transforms.ToTensor(), normalize]))
+        transform=transforms.Compose([transforms.ToTensor()]))
+        # transform=transforms.Compose([transforms.ToTensor(), normalize]))
     train_loader = torch.utils.data.DataLoader(train, batch_size=batch_size,
         shuffle=True, pin_memory=True)
     test_loader = torch.utils.data.DataLoader(test, batch_size=batch_size,
@@ -529,8 +530,8 @@ def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3,
 
             # if not using a model that uses model_factor, 
             # ignore model_factor
-            if all(args.model != s for s in ['wide', 'deep']): 
-                banned += 'model_factor'
+            if args.model not in ['wide', 'deep']: 
+                banned += ['model_factor']
 
             for arg in sorted(vars(args)): 
                 if arg not in banned and getattr(args,arg) is not None: 
