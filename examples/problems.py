@@ -529,7 +529,7 @@ def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3,
 
             # if not using a model that uses model_factor, 
             # ignore model_factor
-            if args.model not in ['wide', 'deep']: 
+            if all(args.model != s for s in ['wide', 'deep']): 
                 banned += 'model_factor'
 
             for arg in sorted(vars(args)): 

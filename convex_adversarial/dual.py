@@ -75,49 +75,19 @@ class InfBall():
 
             zu = (self.u.matmul(nu_pos) + self.l.matmul(nu_neg)).squeeze(1)
             zl = (self.u.matmul(nu_neg) + self.l.matmul(nu_pos)).squeeze(1)
-            # print(zl.size(), nu.size(), self.u.size(), nu_pos.size(),
-            #     self.u.matmul(nu_pos).size())
-            # return (zl.view(zl.size(0), *nu.size()[2:]), 
-            #         zu.view(zu.size(0), *nu.size()[2:]))
-
-            # a = (zl.view(zl.size(0), *nu.size()[2:]))
-            # l1 = self.nu_1[-1].abs().sum(1)
-            # b = (self.nu_x[-1] - self.epsilon*l1)
-            # c = (zu.view(zu.size(0), *nu.size()[2:]))
-            # d = self.nu_x[-1] + self.epsilon*l1
-            # print((a-b).norm().data[0], (c-d).norm().data[0])
             return (zl.view(zl.size(0), *nu.size()[2:]), 
                     zu.view(zu.size(0), *nu.size()[2:]))
-
-            # l1 = self.nu_1[-1].abs().sum(1)
-            # print(zl.view(16,14,14))
-            # print(self.nu_x[-1] - self.epsilon*l1)
-            # assert False
-            # nu_1_sum = self.nu_1[-1].sum(1)
-            # print(self.nu_1[-1].size(), nu_1_sum.size())
-            # zl = torch.max(self.nu_x[-1] - self.epsilon*l1, 
-            #                0.5*(-l1 + nu_1_sum))
-            # zu = torch.min(self.nu_x[-1] + self.epsilon*l1, 
-            #                0.5*(l1 + nu_1_sum))
-            # return (zl,zu)
-            # return (self.nu_x[-1] - self.epsilon*l1, 
-            #         self.nu_x[-1] + self.epsilon*l1)
         else: 
             nu_pos = nu.clamp(min=0).view(nu.size(0), nu.size(1), -1)
             nu_neg = nu.clamp(max=0).view(nu.size(0), nu.size(1), -1)
             u, l = self.u.unsqueeze(3).squeeze(1), self.l.unsqueeze(3).squeeze(1)
-            # a = (nu_neg.matmul(u) + nu_pos.matmul(l)).squeeze(2) 
             return (-nu_neg.matmul(l) - nu_pos.matmul(u)).squeeze(2)
-            # return (-self.u.matmul(nu_neg) - self.l.matmul(nu_pos))
-            # print(nu.size(), self.nu_x[0].view(self.nu_x[0].size(0),-1).unsqueeze(2))
-            # nu = nu.view(nu.size(0), nu.size(1), -1)
-            # nu_x = nu.matmul(self.nu_x[0].view(self.nu_x[0].size(0),-1).unsqueeze(2)).squeeze(2)
-            # l1 = nu.abs().sum(2)
-            # return -nu_x - self.epsilon*l1
 
 class InfBallProj():
     def __init__(self, X, epsilon, k): 
         self.epsilon = epsilon
+        self.l = (X-epsilon).clamp(min=l).view(X.size(0), 1, -1)
+        self.u = (X+epsilon).clamp(max=u).view(X.size(0), 1, -1)
 
         n = X[0].numel()
         self.nu_x = [X] 
@@ -134,6 +104,46 @@ class InfBallProj():
             l1 = torch.median(self.nu[-1].abs(), 1)[0]
             return (self.nu_x[-1] - self.epsilon*l1, 
                     self.nu_x[-1] + self.epsilon*l1)
+        else: 
+            nu = nu.view(nu.size(0), nu.size(1), -1)
+            nu_x = nu.matmul(self.nu_x[0].view(self.nu_x[0].size(0),-1).unsqueeze(2)).squeeze(2)
+            l1 = nu.abs().sum(2)
+            return -nu_x - self.epsilon*l1
+
+class InfBallProj():
+    def __init__(self, X, epsilon, k, l=0, u=1): 
+        self.epsilon = epsilon
+
+        self.nu_one_l = [(X-epsilon).clamp(min=l)]
+        self.nu_one_u = [(X+epsilon).clamp(max=u)]
+
+        self.l = self.nu_one_l[-1].view(X.size(0), 1, -1)
+        self.u = self.nu_one_u[-1].view(X.size(0), 1, -1)
+
+        n = X[0].numel()
+        R = X.data.new(1,k,*X.size()[1:]).cauchy_()
+        self.nu_l = [Variable(R * self.nu_one_l[-1].data.unsqueeze(1))]
+        self.nu_u = [Variable(R * self.nu_one_u[-1].data.unsqueeze(1))]
+
+    def apply(self, dual_layer): 
+        self.nu_l.append(dual_layer.affine(*self.nu_l))
+        self.nu_one_l.append(dual_layer.affine(*self.nu_one_l))
+        self.nu_u.append(dual_layer.affine(*self.nu_u))
+        self.nu_one_u.append(dual_layer.affine(*self.nu_one_u))
+
+    def fval(self, nu=None, nu_prev=None): 
+        if nu is None: 
+            nu_l1_u = torch.median(self.nu_u[-1].abs(),1)[0]
+            nu_pos_u = (nu_l1_u + self.nu_one_u[-1])/2
+            nu_neg_u = (-nu_l1_u + self.nu_one_u[-1])/2
+
+            nu_l1_l = torch.median(self.nu_l[-1].abs(),1)[0]
+            nu_pos_l = (nu_l1_l + self.nu_one_l[-1])/2
+            nu_neg_l = (-nu_l1_l + self.nu_one_l[-1])/2
+
+            zu = nu_pos_u + nu_neg_l
+            zl = nu_neg_u + nu_pos_l
+            return zl,zu
         else: 
             return InfBall.fval(self, nu=nu, nu_prev=nu_prev)
 
@@ -333,13 +343,8 @@ class DualReLUProj(DualReLU):
 
         nu = Variable(zl.data.new(n, k, *(d.size()[1:])).zero_())
         nu_one = Variable(zl.data.new(n, *(d.size()[1:])).zero_())
-        # print(I.unsqueeze(1).size(), nu.size(), nu_one.size())
-        # nu.data[(I.data).unsqueeze(1).expand_as(nu)].cauchy_()
         if  (I.data).sum() > 0: 
-            # nu_I = nu.data[I.data.unsqueeze(1).expand_as(nu)]
-            # nu.data[I.data.unsqueeze(1).expand_as(nu)] = nu.data[I.data.unsqueeze(1).expand_as(nu)].cauchy_()
             nu.data[I.data.unsqueeze(1).expand_as(nu)] = nu.data.new(I.data.sum()*k).cauchy_()
-            # nu.data[I.data.unsqueeze(1).expand_as(nu)] = nu.data.new(I.data.sum()*k).fill_(3)
             nu_one.data[I.data] = 1
         nu = zl.unsqueeze(1)*nu
         nu_one = zl*nu_one
@@ -369,8 +374,6 @@ class DualReLUProj(DualReLU):
             # flips only once. 
             zl = (-n - no)/2
             zu = (n - no)/2
-            # zl = (-n + no)/2
-            # zu = -(-n - no)/2
 
             return zl,zu
         else: 
@@ -396,40 +399,19 @@ class DualDense():
             if i < len(dense.Ws)-1 and W is not None: 
                 idx = i-len(dense.Ws)+1
                 # dual_ts needs to be len(dense.Ws)-i long
-                # print(idx, len(dense.Ws)-i, 'adding ', (len(dense.Ws)-i-len(net[idx].dual_ts)-1))
                 net[idx].dual_ts = [dual_layer] + [None]*(len(dense.Ws)-i-len(net[idx].dual_ts)-1) + net[idx].dual_ts
-        # assert False
+
         self.dual_ts = [self.duals[-1]]
 
 
     def affine(self, *xs): 
         duals = self.duals[-min(len(xs),len(self.duals)):]
-        # print("*"*80)
-        # for i,W in zip(range(-len(duals) + len(xs), len(xs)),
-        #         duals):
-        #     print(i, len(xs))
-        # print("*"*80)
-        # for i in range(-len(duals) + len(xs), len(xs)):
-        #     print(i, len())
         return sum(W.affine(*xs[:i+1]) 
             for i,W in zip(range(-len(duals) + len(xs), len(xs)),
                 duals) if W is not None)
 
     def affine_transpose(self, *xs): 
         dual_ts = self.dual_ts[-min(len(xs),len(self.dual_ts)):]
-        # print(dual_ts, len(xs), len(self.dual_ts)) 
-        # print("#"*80)
-        #     if W is not None: 
-        #         print(i, W.affine_transpose(*xs[:i+1]).size(), W.layer)
-        #     else: 
-        #         print(i, W, xs[i+1].size())
-        # print("$"*80)
-        # for i,x in enumerate(xs): 
-        #     print(i,x.size())
-        # print("*"*80)
-        # print(len(dual_ts), len(xs))
-        # for i in range(-len(dual_ts) + len(xs), len(xs)): 
-        #     print(len(xs[:i+1]), len(xs))
         return sum(W.affine_transpose(*xs[:i+1]) 
             for i,W in zip(range(-len(dual_ts) + len(xs), len(xs)),
                 dual_ts) if W is not None)
@@ -459,9 +441,6 @@ class DualBatchNorm2d():
         else: 
             mu = layer.running_mean
             var = layer.running_var
-        # mu = layer.running_mean
-        # var = layer.running_var
-
         
         eps = layer.eps
 
@@ -525,10 +504,10 @@ class DualNetBounds:
         m : number of probabilistic bounds to take the max over
         """
         # need to change that if no batchnorm, can pass just a single example
-        # if not batchnorm: 
-        #     zs = [Variable(X.data[:1], volatile=True)]
-        # else:
-        zs = [Variable(X.data, volatile=True)]
+        if any('BatchNorm2d' in str(l.__class__.__name__) for l in net): 
+            zs = [Variable(X.data, volatile=True)]
+        else:
+            zs = [Variable(X.data[:1], volatile=True)]
         nf = [zs[0].size()]
         for l in net: 
             if isinstance(l, Dense): 
@@ -537,13 +516,12 @@ class DualNetBounds:
                 zs.append(l(zs[-1]))
             nf.append(zs[-1].size())
 
-        # if l1_proj is not None and l1_type=='median' and X[0].numel() > l1_proj:
+        if l1_proj is not None and l1_type=='median' and X[0].numel() > l1_proj:
 
-        #     # need to change to only use projection when necessary
-        #     dual_net = [InfBallProj(X,epsilon,l1_proj)]
-        # else:
-        #     dual_net = [InfBall(X, epsilon)]
-        dual_net = [InfBall(X, epsilon)]
+            # need to change to only use projection when necessary
+            dual_net = [InfBallProj(X,epsilon,l1_proj)]
+        else:
+            dual_net = [InfBall(X, epsilon)]
 
         if any(isinstance(l, Dense) for l in net): 
             dense_t = Aff.transpose_all(net)
@@ -562,21 +540,11 @@ class DualNetBounds:
                 if I.data.sum() > 0:
                     d[I] += zu[I]/(zu[I] - zl[I])
 
-                # print(i)
                 if l1_proj is not None and l1_type=='median' and I.data.sum() > l1_proj:
                     dual_layer = DualReLUProj(I, d, zl, l1_proj)
                 else:
                     dual_layer = DualReLU(I, d, zl)
-                # extra_layer = DualReLU(I,d,zl)
-                # proj = DualReLUProj(I, d, zl, l1_proj)
-                # print
-                # print(I.size(), d.size(), zl.size())
-                # old = L1_engine.L1_Cauchy(X, l1_proj, 1, 0, nn.Sequential(),
-                #                           I=I.view(50,-1), d=d.view(50,-1), zl=zl.view(50,-1),
-                #                             scatter_grad=True)
-                # print(proj.nus[0].size(),old.nu.size())
-                # print((proj.nus[0].view(50,200,-1) - old.nu).norm())
-                # print((proj.d - exact.d).norm().data)
+
             elif 'Flatten' in (str(layer.__class__.__name__)): 
                 dual_layer = DualReshape(in_f, out_f)
             elif isinstance(layer, Dense): 
@@ -595,55 +563,8 @@ class DualNetBounds:
                 dual_net.append(dual_layer)
             else: 
                 self.last_layer = dual_layer
-            # if i == 2: 
-            #     m = 10
-            #     I.fill_(1)
-            #     zl.fill_(-1)
-            #     duals = [DualReLUProj(I, d, zl, 50) for _ in range(m)]
-            #     for dual in duals: 
-            #         dual.apply(dual_layer)
-            #     avg_l = sum([dual.fval()[0] for dual in duals])/m
-            #     avg_u = sum([dual.fval()[1] for dual in duals])/m
-            # #     dual_exact = DualReLU(I, d, zl)
-            # #     dual_exact.apply(dual_layer)
-            # # #     # dual.nus[-1]
-            # # #     # print(dual.nus[-1].abs().median(1)[0])
-            #     print(avg_l, avg_u)
 
-            #     # dual_p = DualReLUProj(I, d, zl, 50)
-            #     dual = DualReLU(I, d, zl)
-            #     # dual_p.apply(dual_net[3])
-            #     dual.apply(dual_layer)
-            #     # print(dual.nus[0])
-            #     print(dual.fval())
-            # # if i == 4: 
-            # #     I.fill_(1)
-            # #     zl.fill_(1)
-            #     assert False
-            #     print(dual_exact.fval()[0])
-                # print(dual_exact.nus[-1].view(12,100,101).abs().sum(1))
-                # print(dual_net[2].fval()[0])
-                # print(dual_layer)
-                # assert False
-                # print(dual.fval())
-                # tmp = [DualReLUProj(I, d, zl, l1_proj) for _ in range(10)]
-                # for t in tmp: 
-                #     t.apply(dual_layer)
-                # avg_proj = sum([t.fval()[0] for t in tmp])/10
-                # print(avg_proj)
-                # projection_layer = dual_net[-2]
-                # extra_layer.apply(dual_layer)
-                # print(projection_layer.fval()[0].data)
-                # print(extra_layer.fval()[0].data)
-                # print(projection_layer.fval()[0].data - extra_layer.fval()[0].data)
-                # assert False
         self.dual_net = dual_net
-        # print("*"*80)
-        # for dn in dual_net: 
-        #     if isinstance(dn, DualDense): 
-        #         print(dn.dual_ts)
-        # print("*"*80)
-        # print(dual_net)
         return 
         
     def g(self, c):
@@ -655,12 +576,7 @@ class DualNetBounds:
         
         nu.append(None)
         nu = list(reversed(nu))
-        # nu = [None, nu1, ..., nuk=c]
 
-        # print(sum(l.fval(nu=n, nu_prev=nprev) 
-        #     for l,nprev,n in zip(dual_net, nu[:-1],nu[1:])))
-        # assert False
-        # assert False
         return sum(l.fval(nu=n, nu_prev=nprev) 
             for l,nprev,n in zip(dual_net, nu[:-1],nu[1:]))
 
@@ -682,15 +598,6 @@ class RobustBounds(nn.Module):
 
 def robust_loss(net, epsilon, X, y, 
                 size_average=True, device_ids=None, **kwargs):
-    # num_classes = net[-1].out_features
-    # dual = DualNetBounds(net, X, epsilon, **kwargs)
-    # c = Variable(torch.eye(num_classes).type_as(X.data)[y.data].unsqueeze(1) - torch.eye(num_classes).type_as(X.data).unsqueeze(0))
-    # if X.is_cuda:
-    #     c = c.cuda()
-    # f = -dual.g(c)
-    # if device_ids is None: 
-    #     f = RobustBounds(net, epsilon, **kwargs)(X,y)
-    # else: 
     f = nn.DataParallel(RobustBounds(net, epsilon, **kwargs),
                         device_ids=None)(X,y)
     err = (f.data.max(1)[1] != y.data)
