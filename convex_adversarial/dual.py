@@ -52,8 +52,10 @@ class ForwardPass:
 
 
 class InfBall():
-    def __init__(self, X, epsilon): 
+    def __init__(self, X, epsilon, l=0, u=1): 
         self.epsilon = epsilon
+        self.l = (X-epsilon).clamp(min=l).view(X.size(0), 1, -1)
+        self.u = (X+epsilon).clamp(max=u).view(X.size(0), 1, -1)
 
         n = X[0].numel()
         self.nu_x = [X] 
@@ -67,20 +69,51 @@ class InfBall():
 
     def fval(self, nu=None, nu_prev=None): 
         if nu is None: 
-            l1 = self.nu_1[-1].abs().sum(1)
+            nu = self.nu_1[-1]
+            nu_pos = nu.clamp(min=0).view(nu.size(0), nu.size(1), -1)
+            nu_neg = nu.clamp(max=0).view(nu.size(0), nu.size(1), -1)
+
+            zu = (self.u.matmul(nu_pos) + self.l.matmul(nu_neg)).squeeze(1)
+            zl = (self.u.matmul(nu_neg) + self.l.matmul(nu_pos)).squeeze(1)
+            # print(zl.size(), nu.size(), self.u.size(), nu_pos.size(),
+            #     self.u.matmul(nu_pos).size())
+            # return (zl.view(zl.size(0), *nu.size()[2:]), 
+            #         zu.view(zu.size(0), *nu.size()[2:]))
+
+            # a = (zl.view(zl.size(0), *nu.size()[2:]))
+            # l1 = self.nu_1[-1].abs().sum(1)
+            # b = (self.nu_x[-1] - self.epsilon*l1)
+            # c = (zu.view(zu.size(0), *nu.size()[2:]))
+            # d = self.nu_x[-1] + self.epsilon*l1
+            # print((a-b).norm().data[0], (c-d).norm().data[0])
+            return (zl.view(zl.size(0), *nu.size()[2:]), 
+                    zu.view(zu.size(0), *nu.size()[2:]))
+
+            # l1 = self.nu_1[-1].abs().sum(1)
+            # print(zl.view(16,14,14))
+            # print(self.nu_x[-1] - self.epsilon*l1)
+            # assert False
             # nu_1_sum = self.nu_1[-1].sum(1)
+            # print(self.nu_1[-1].size(), nu_1_sum.size())
             # zl = torch.max(self.nu_x[-1] - self.epsilon*l1, 
-            #                0.5*(-l1 - nu_1_sum))
-            # zu = torch.max(self.nu_x[-1] + self.epsilon*l1, 
-            #                0.5*(l1 - nu_1_sum))
+            #                0.5*(-l1 + nu_1_sum))
+            # zu = torch.min(self.nu_x[-1] + self.epsilon*l1, 
+            #                0.5*(l1 + nu_1_sum))
             # return (zl,zu)
-            return (self.nu_x[-1] - self.epsilon*l1, 
-                    self.nu_x[-1] + self.epsilon*l1)
+            # return (self.nu_x[-1] - self.epsilon*l1, 
+            #         self.nu_x[-1] + self.epsilon*l1)
         else: 
-            nu = nu.view(nu.size(0), nu.size(1), -1)
-            nu_x = nu.matmul(self.nu_x[0].view(self.nu_x[0].size(0),-1).unsqueeze(2)).squeeze(2)
-            l1 = self.epsilon*nu.abs().sum(2)
-            return -nu_x - l1
+            nu_pos = nu.clamp(min=0).view(nu.size(0), nu.size(1), -1)
+            nu_neg = nu.clamp(max=0).view(nu.size(0), nu.size(1), -1)
+            u, l = self.u.unsqueeze(3).squeeze(1), self.l.unsqueeze(3).squeeze(1)
+            # a = (nu_neg.matmul(u) + nu_pos.matmul(l)).squeeze(2) 
+            return (-nu_neg.matmul(l) - nu_pos.matmul(u)).squeeze(2)
+            # return (-self.u.matmul(nu_neg) - self.l.matmul(nu_pos))
+            # print(nu.size(), self.nu_x[0].view(self.nu_x[0].size(0),-1).unsqueeze(2))
+            # nu = nu.view(nu.size(0), nu.size(1), -1)
+            # nu_x = nu.matmul(self.nu_x[0].view(self.nu_x[0].size(0),-1).unsqueeze(2)).squeeze(2)
+            # l1 = nu.abs().sum(2)
+            # return -nu_x - self.epsilon*l1
 
 class InfBallProj():
     def __init__(self, X, epsilon, k): 
