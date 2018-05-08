@@ -145,6 +145,7 @@ class InfBallProjBounded():
 
         self.nu_one_l = [(X-epsilon).clamp(min=l)]
         self.nu_one_u = [(X+epsilon).clamp(max=u)]
+        self.nu_x = [X] 
 
         self.l = self.nu_one_l[-1].view(X.size(0), 1, -1)
         self.u = self.nu_one_u[-1].view(X.size(0), 1, -1)
