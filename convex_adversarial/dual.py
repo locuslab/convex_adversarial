@@ -51,7 +51,37 @@ class ForwardPass:
         return self.apply(W)
 
 
+
 class InfBall():
+    def __init__(self, X, epsilon): 
+        self.epsilon = epsilon
+
+        n = X[0].numel()
+        self.nu_x = [X] 
+        self.nu_1 = [X.data.new(n,n)]
+        torch.eye(n, out=self.nu_1[0])
+        self.nu_1[0] = Variable(self.nu_1[0].view(-1,*X.size()[1:]).unsqueeze(0))
+
+    def apply(self, dual_layer): 
+        self.nu_x.append(dual_layer.affine(*self.nu_x))
+        self.nu_1.append(dual_layer.affine(*self.nu_1))
+
+    def fval(self, nu=None, nu_prev=None): 
+        if nu is None: 
+            l1 = self.nu_1[-1].abs().sum(1)
+            # nu_x_pos = (self.nu_x[0]-self.epsilon).view(self.nu_x[0].size(0),-1).matmul(self.nu_1[-1].view(784,-1).clamp(min=0))
+            # print(nu_x_pos.view(-1))
+            # nu_x_pos = (self.nu_x[0]+self.epsilon).view(self.nu_x[0].size(0),-1).matmul(self.nu_1[-1].view(784,-1).clamp(max=0))
+            # # print(nu_x_pos.view(-1))
+            return (self.nu_x[-1] - self.epsilon*l1, 
+                    self.nu_x[-1] + self.epsilon*l1)
+        else: 
+            nu = nu.view(nu.size(0), nu.size(1), -1)
+            nu_x = nu.matmul(self.nu_x[0].view(self.nu_x[0].size(0),-1).unsqueeze(2)).squeeze(2)
+            l1 = self.epsilon*nu.abs().sum(2)
+            return -nu_x - l1
+
+class InfBallBounded():
     def __init__(self, X, epsilon, l=0, u=1): 
         self.epsilon = epsilon
         self.l = (X-epsilon).clamp(min=l).view(X.size(0), 1, -1)
@@ -86,8 +116,6 @@ class InfBall():
 class InfBallProj():
     def __init__(self, X, epsilon, k): 
         self.epsilon = epsilon
-        self.l = (X-epsilon).clamp(min=l).view(X.size(0), 1, -1)
-        self.u = (X+epsilon).clamp(max=u).view(X.size(0), 1, -1)
 
         n = X[0].numel()
         self.nu_x = [X] 
@@ -108,9 +136,10 @@ class InfBallProj():
             nu = nu.view(nu.size(0), nu.size(1), -1)
             nu_x = nu.matmul(self.nu_x[0].view(self.nu_x[0].size(0),-1).unsqueeze(2)).squeeze(2)
             l1 = nu.abs().sum(2)
+
             return -nu_x - self.epsilon*l1
 
-class InfBallProj():
+class InfBallProjBounded():
     def __init__(self, X, epsilon, k, l=0, u=1): 
         self.epsilon = epsilon
 
@@ -491,7 +520,7 @@ class DualSequential():
 
 class DualNetBounds: 
     def __init__(self, net, X, epsilon, alpha_grad=False, scatter_grad=False, 
-                 l1_proj=None, l1_eps=None, m=None, batchnorm=False,
+                 l1_proj=None, l1_eps=None, m=None,
                  l1_type='exact'):
         """ 
         net : ReLU network
@@ -516,12 +545,12 @@ class DualNetBounds:
                 zs.append(l(zs[-1]))
             nf.append(zs[-1].size())
 
-        if l1_proj is not None and l1_type=='median' and X[0].numel() > l1_proj:
 
-            # need to change to only use projection when necessary
-            dual_net = [InfBallProj(X,epsilon,l1_proj)]
+        # Use the bounded boxes
+        if l1_proj is not None and l1_type=='median' and X[0].numel() > l1_proj:
+            dual_net = [InfBallProjBounded(X,epsilon,l1_proj)]
         else:
-            dual_net = [InfBall(X, epsilon)]
+            dual_net = [InfBallBounded(X, epsilon)]
 
         if any(isinstance(l, Dense) for l in net): 
             dense_t = Aff.transpose_all(net)
