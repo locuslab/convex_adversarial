@@ -87,7 +87,7 @@ if __name__ == "__main__":
         # opt = optim.Adam(model.parameters(), lr=args.lr)
         opt = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum,
             weight_decay=args.weight_decay)
-        lr_scheduler = optim.lr_scheduler.StepLR(opt, step_size=30, gamma=0.5)
+        lr_scheduler = optim.lr_scheduler.StepLR(opt, step_size=20, gamma=0.5)
         eps_schedule = np.logspace(np.log10(args.starting_epsilon), 
                                    np.log10(args.epsilon), 
                                    args.schedule_length)
