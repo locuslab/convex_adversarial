@@ -1,17 +1,22 @@
-directory=`basename $0 .sh`
-prefix="nips/${directory}"
+if [ "${1}" != "" && "${2}" != "" ]; then
+     directory=`basename $0 .sh`
+     prefix="nips/${directory}"
 
-mkdir -p $prefix
+     mkdir -p $prefix
 
-python examples/cifar.py --prefix ${prefix}/cifar \
-                         --model vgg \
-                         --l1_proj 50 \
-                         --l1_train median \
-                         --lr 0.001 \
-                         --epsilon 0.031 \
-                         --starting_epsilon 0.001 \
-                         --cuda_ids 3 \
-                         --verbose 200 \
-                         --epochs 20 \
-                         --batch_size 50 \
-                         --schedule_length 20
+     python examples/cifar.py --prefix ${prefix}/cifar \
+                              --model vgg \
+                              --l1_proj ${2} \
+                              --l1_train median \
+                              --l1_test median \
+                              --lr 0.001 \
+                              --epsilon 0.031 \
+                              --starting_epsilon 0.001 \
+                              --epochs 80 \
+                              --batch_size 50 \
+                              --schedule_length 40 \
+                              --verbose 200 \
+                              --cuda_ids ${1}
+else
+    echo "Error: need to pass in GPU ids to run script on."
+fi
