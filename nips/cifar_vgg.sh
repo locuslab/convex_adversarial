@@ -18,5 +18,5 @@ if [ "${1}" != "" && "${2}" != "" ]; then
                               --verbose 200 \
                               --cuda_ids ${1}
 else
-    echo "Error: need to pass in GPU ids to run script on."
+    echo "Error: need to pass in GPU ids and l1_proj to run script."
 fi
