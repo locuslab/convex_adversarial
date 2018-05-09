@@ -1,7 +1,4 @@
 **
-!examples/
+!examples
 !convex_adversarial
-!raw
-!processed
-!fashion_mnist
-!cifar-10-batches-py
+!data
