@@ -1,4 +1,4 @@
-if [ "${1}" != "" && "${2}" != "" ]; then
+if [ "${1}" != "" ] && [ "${2}" != "" ]; then
      directory=`basename $0 .sh`
      prefix="nips/${directory}"
 

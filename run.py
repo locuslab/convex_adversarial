@@ -5,7 +5,7 @@ import argparse
 def docker_run(cmd): 
     uid = int(subprocess.run(['id', '-u'], stdout=subprocess.PIPE).stdout)
     gid = int(subprocess.run(['id', '-g'], stdout=subprocess.PIPE).stdout)
-    subprocess.run(['docker', 'build',  '-qt', 'convex_adversarial', '.'])
+    subprocess.run(['docker', 'build',  '-t', 'convex_adversarial', '.'])
 
 
     s = """docker run -it --runtime=nvidia --rm -w /home -v ${{PWD}}/nips/:/home/nips/ convex_adversarial zsh -c '{}; {}'"""

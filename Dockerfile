@@ -24,7 +24,7 @@ RUN wget --quiet https://repo.continuum.io/archive/Anaconda3-5.1.0-Linux-x86_64.
 ENV PATH /opt/conda/bin:$PATH
 
 RUN conda update -n base conda && \
-    conda install pytorch torchvision -c pytorch -y
+    conda install pytorch=0.3.0 torchvision -c pytorch -y
 
 RUN pip install --upgrade pip && \
     pip install setproctitle line_profiler setGPU waitGPU dotfiles

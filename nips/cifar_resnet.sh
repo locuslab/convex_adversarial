@@ -1,6 +1,6 @@
-if [ "${1}" != "" && "${2}" != "" ]; then
+if [ "${1}" != "" ] && [ "${2}" != "" ]; then
      directory=`basename $0 .sh`
-     prefix="nips/${directory}"
+     prefix="nips/${directory}_${2}"
 
      mkdir -p $prefix
 
