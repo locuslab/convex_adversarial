@@ -40,10 +40,12 @@ if __name__ == "__main__":
     if args.model == 'vgg': 
         # raise ValueError
         model = pblm.cifar_model_vgg().cuda()
-        _, test_loader = pblm.cifar_loaders(1, )
-        test_loader = [tl for i,tl in enumerate(test_loader) if i < 200]
+        _, test_loader = pblm.cifar_loaders(1, shuffle_test=True)
+        test_loader = [tl for i,tl in enumerate(test_loader) if i < 1000]
     elif args.model == 'resnet': 
         model = pblm.cifar_model_resnet(N=1, factor=1).cuda()
+        _, test_loader = pblm.cifar_loaders(1, shuffle_test=True)
+        test_loader = [tl for i,tl in enumerate(test_loader) if i < 1000]
         #model = pblm.mnist_model_large().cuda()
 
     elif args.model == 'wide': 

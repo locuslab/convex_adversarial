@@ -276,7 +276,7 @@ def har_500_250_100_model():
     )
     return model
 
-def cifar_loaders(batch_size): 
+def cifar_loaders(batch_size, shuffle_test=False): 
     # normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
     #                                  std=[0.229, 0.224, 0.225])
     train = datasets.CIFAR10('.', train=True, download=True, 
@@ -292,7 +292,7 @@ def cifar_loaders(batch_size):
     train_loader = torch.utils.data.DataLoader(train, batch_size=batch_size,
         shuffle=True, pin_memory=True)
     test_loader = torch.utils.data.DataLoader(test, batch_size=batch_size,
-        shuffle=False, pin_memory=True)
+        shuffle=shuffle_test, pin_memory=True)
     return train_loader, test_loader
 
 def cifar_model(): 
