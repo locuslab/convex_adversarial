@@ -14,7 +14,7 @@ if [ "${1}" != "" ]; then
                                  --l1_train median \
                                  --epochs 60 \
                                  --starting_epsilon 0.001 \
-                                 --epsilon 0.031 \
+                                 --epsilon 0.139 \
                                  --schedule_length 20 \
                                  --verbose 400 \
                                  --cuda_ids ${1}

@@ -285,8 +285,8 @@ def cifar_loaders(batch_size, shuffle_test=False):
                                      std=[0.225, 0.225, 0.225])
     train = datasets.CIFAR10('./data', train=True, download=True, 
         transform=transforms.Compose([
-            # transforms.RandomHorizontalFlip(),
-            # transforms.RandomCrop(32, 4),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomCrop(32, 4),
             transforms.ToTensor(),
             normalize,
         ]))
