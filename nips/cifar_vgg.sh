@@ -10,7 +10,7 @@ if [ "${1}" != "" ] && [ "${2}" != "" ]; then
                               --l1_train median \
                               --l1_test median \
                               --lr 0.001 \
-                              --epsilon 0.031 \
+                              --epsilon 0.139 \
                               --starting_epsilon 0.001 \
                               --epochs 80 \
                               --batch_size 50 \
