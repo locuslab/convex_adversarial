@@ -281,7 +281,8 @@ def har_500_250_100_model():
 
 def cifar_loaders(batch_size, shuffle_test=False): 
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])
+                                     # std=[0.229, 0.224, 0.225])
+                                     std=[0.225, 0.225, 0.225])
     train = datasets.CIFAR10('./data', train=True, download=True, 
         transform=transforms.Compose([
             # transforms.RandomHorizontalFlip(),

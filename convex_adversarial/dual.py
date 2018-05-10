@@ -522,7 +522,7 @@ class DualSequential():
 class DualNetBounds: 
     def __init__(self, net, X, epsilon, alpha_grad=False, scatter_grad=False, 
                  l1_proj=None, l1_eps=None, m=None,
-                 l1_type='exact'):
+                 l1_type='exact', bounded_input=False):
         """ 
         net : ReLU network
         X : minibatch of examples
@@ -549,9 +549,15 @@ class DualNetBounds:
 
         # Use the bounded boxes
         if l1_proj is not None and l1_type=='median' and X[0].numel() > l1_proj:
-            dual_net = [InfBallProj(X,epsilon,l1_proj)]
+            if bounded_input: 
+                dual_net = [InfBallProjBounded(X,epsilon,l1_proj)]
+            else: 
+                dual_net = [InfBallProj(X,epsilon,l1_proj)]
         else:
-            dual_net = [InfBall(X, epsilon)]
+            if bounded_input: 
+                dual_net = [InfBallBounded(X, epsilon)]
+            else:
+                dual_net = [InfBall(X, epsilon)]
 
         if any(isinstance(l, Dense) for l in net): 
             dense_t = Aff.transpose_all(net)
