@@ -549,9 +549,9 @@ class DualNetBounds:
 
         # Use the bounded boxes
         if l1_proj is not None and l1_type=='median' and X[0].numel() > l1_proj:
-            dual_net = [InfBallProjBounded(X,epsilon,l1_proj)]
+            dual_net = [InfBallProj(X,epsilon,l1_proj)]
         else:
-            dual_net = [InfBallBounded(X, epsilon)]
+            dual_net = [InfBall(X, epsilon)]
 
         if any(isinstance(l, Dense) for l in net): 
             dense_t = Aff.transpose_all(net)

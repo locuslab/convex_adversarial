@@ -280,18 +280,18 @@ def har_500_250_100_model():
     return model
 
 def cifar_loaders(batch_size, shuffle_test=False): 
-    # normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-    #                                  std=[0.229, 0.224, 0.225])
+    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225])
     train = datasets.CIFAR10('./data', train=True, download=True, 
         transform=transforms.Compose([
-            transforms.RandomHorizontalFlip(),
-            transforms.RandomCrop(32, 4),
+            # transforms.RandomHorizontalFlip(),
+            # transforms.RandomCrop(32, 4),
             transforms.ToTensor(),
-            # normalize,
+            normalize,
         ]))
     test = datasets.CIFAR10('./data', train=False, 
-        transform=transforms.Compose([transforms.ToTensor()]))
-        # transform=transforms.Compose([transforms.ToTensor(), normalize]))
+        # transform=transforms.Compose([transforms.ToTensor()]))
+        transform=transforms.Compose([transforms.ToTensor(), normalize]))
     train_loader = torch.utils.data.DataLoader(train, batch_size=batch_size,
         shuffle=True, pin_memory=True)
     test_loader = torch.utils.data.DataLoader(test, batch_size=batch_size,
