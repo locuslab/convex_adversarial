@@ -571,8 +571,8 @@ class DualNetBounds:
                 zl, zu = zip(*[l.fval() for l in dual_net])
                 zl, zu = sum(zl), sum(zu)
 
-                d = (zl >= -1e-5).detach().type_as(X)
-                I = ((zu > 1e-5).detach() * (zl < -1e-5).detach())
+                d = (zl >= 0).detach().type_as(X)
+                I = ((zu > 0).detach() * (zl < 0).detach())
                 if I.data.sum() > 0:
                     d[I] += zu[I]/(zu[I] - zl[I])
 

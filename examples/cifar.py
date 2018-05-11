@@ -108,7 +108,7 @@ if __name__ == "__main__":
                 else:
                     epsilon = args.epsilon
                 train_robust(train_loader, model, opt, epsilon, t, train_log, 
-                    args.verbose, l1_type=args.l1_train, **kwargs)
+                    args.verbose, l1_type=args.l1_train, clip_grad=1, **kwargs)
                 err = evaluate_robust(test_loader, model, args.epsilon, t, test_log,
                    args.verbose, l1_type=args.l1_test, **kwargs)
             print('Epoch {}: {} err'.format(t, err))

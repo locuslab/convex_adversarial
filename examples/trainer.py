@@ -1,3 +1,4 @@
+
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
@@ -11,6 +12,7 @@ import gc
 from attacks import _pgd
 
 def train_robust(loader, model, opt, epsilon, epoch, log, verbose, 
+                 clip_grad=None,
                  **kwargs):
     batch_time = AverageMeter()
     data_time = AverageMeter()
@@ -41,6 +43,9 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
 
         for p in model.parameters(): 
             p.grad.data.clamp_(min=-10, max=10)
+
+        if clip_grad: 
+            nn.utils.clip_grad_norm(model.parameters(), clip_grad)
 
         opt.step()
 
