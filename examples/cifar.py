@@ -10,16 +10,19 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 import torch.backends.cudnn as cudnn
 cudnn.benchmark = True
+# torch.backends.cudnn.deterministic = True
 
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
-
+import random
+    
 import setproctitle
 
 import problems as pblm
 from trainer import *
 
 import math
+import numpy
 
 if __name__ == "__main__": 
     # args = pblm.argparser(epsilon = 0.139, batch_size = 50)
@@ -37,8 +40,9 @@ if __name__ == "__main__":
     #     test_loader = [tl for i,tl in enumerate(test_loader) if i < 200]
 
     torch.manual_seed(args.seed)
-    torch.cuda.manual_seed(args.seed)
-
+    torch.cuda.manual_seed_all(args.seed)
+    random.seed(0)
+    numpy.random.seed(0)
 
     if args.model == 'vgg': 
         # raise ValueError
