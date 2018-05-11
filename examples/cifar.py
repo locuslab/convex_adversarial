@@ -25,8 +25,8 @@ import math
 import numpy
 
 if __name__ == "__main__": 
-    # args = pblm.argparser(epsilon = 0.139, batch_size = 50)
-    args = pblm.argparser(epsilon = 0.031, batch_size = 32, lr=0.05)
+    args = pblm.argparser(epsilon = 0.139, batch_size = 50, lr=0.05)
+    # args = pblm.argparser(epsilon = 0.031, batch_size = 32, lr=0.05)
     print("saving file to {}".format(args.prefix))
     setproctitle.setproctitle(args.prefix)
 

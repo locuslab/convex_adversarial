@@ -398,8 +398,8 @@ def mnist_model_resnet_bn():
 
 
 def cifar_model_resnet(N = 5, factor=10): 
-    def  block(in_filters, out_filters, k): 
-        if in_filters == out_filters: 
+    def  block(in_filters, out_filters, k, downsample): 
+        if not downsample: 
             k_first = 3
             skip_stride = 1
             k_skip = 1
@@ -416,15 +416,15 @@ def cifar_model_resnet(N = 5, factor=10):
             nn.ReLU()
         ]
     conv1 = [nn.Conv2d(3,16,3,stride=1,padding=1), nn.ReLU()]
-    conv2 = block(16,16*factor,3)
+    conv2 = block(16,16*factor,3, False)
     for _ in range(N): 
-        conv2.extend(block(16*factor,16*factor,3))
-    conv3 = block(16*factor,32*factor,3)
+        conv2.extend(block(16*factor,16*factor,3, False))
+    conv3 = block(16*factor,32*factor,3, True)
     for _ in range(N-1): 
-        conv3.extend(block(32*factor,32*factor,3))
-    conv4 = block(32*factor,64*factor,3)
+        conv3.extend(block(32*factor,32*factor,3, False))
+    conv4 = block(32*factor,64*factor,3, True)
     for _ in range(N-1): 
-        conv4.extend(block(64*factor,64*factor,3))
+        conv4.extend(block(64*factor,64*factor,3, False))
     layers = (
         conv1 + 
         conv2 + 
@@ -438,6 +438,14 @@ def cifar_model_resnet(N = 5, factor=10):
     model = DenseSequential(
         *layers
     )
+    # _ = [torch.autograd.Variable(torch.zeros(1,3,32,32))]
+    # for l in layers:
+    #     if isinstance(l, Dense): 
+    #         _.append(l(*_))
+    #     else:
+    #         _.append(l(_[-1]))
+    #     print(_[-1].size())
+    # assert False
     # print(model)
     for m in model.modules():
         if isinstance(m, nn.Conv2d):
