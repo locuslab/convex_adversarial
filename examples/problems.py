@@ -275,6 +275,12 @@ def svhn_model():
     ).cuda()
     return model
 
+def svhn_model_wide(k): 
+    return model_wide(3, 8, k)
+
+def svhn_model_deep(k): 
+    return model_deep(3, 8, k)
+
 def har_loaders(batch_size):     
     X_te = torch.from_numpy(np.loadtxt('../datasets/UCI HAR Dataset/test/X_test.txt')).float()
     X_tr = torch.from_numpy(np.loadtxt('../datasets/UCI HAR Dataset/train/X_train.txt')).float()
