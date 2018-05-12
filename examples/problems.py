@@ -573,6 +573,9 @@ def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3,
             if args.model not in ['wide', 'deep']: 
                 banned += ['model_factor']
 
+            if args.model != 'resnet': 
+                banned += ['resnet_N', 'resnet_factor']
+
             for arg in sorted(vars(args)): 
                 if arg not in banned and getattr(args,arg) is not None: 
                     args.prefix += '_' + arg + '_' +str(getattr(args, arg))
