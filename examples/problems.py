@@ -26,7 +26,7 @@ def model_wide(in_ch, out_width, k):
     )
     return model
 
-def model_deep(in_ch, out_width, k): 
+def model_deep(in_ch, out_width, k, n1=8, n2=16, linear_size=100): 
     def group(inf, outf, N): 
         if N == 1: 
             conv = [nn.Conv2d(inf, outf, 4, stride=2, padding=1), 
@@ -41,8 +41,6 @@ def model_deep(in_ch, out_width, k):
             conv.append(nn.ReLU())
         return conv
 
-    n1 = 8
-    n2 = 16
     conv1 = group(in_ch, n1, k)
     conv2 = group(n1, n2, k)
 
@@ -51,7 +49,7 @@ def model_deep(in_ch, out_width, k):
         *conv1, 
         *conv2,
         Flatten(),
-        nn.Linear(n2*out_width*out_width,100),
+        nn.Linear(n2*out_width*out_width,linear_size),
         nn.ReLU(),
         nn.Linear(100, 10)
     )
@@ -104,6 +102,47 @@ def mnist_model():
         nn.Linear(100, 10)
     )
     return model
+
+def mnist_model_deep_wide():
+    # in filters, out width, depth, filters1, filters2
+    return model_deep(1, 7, 3, n1=32, n2=64, linear_size=512) 
+
+def model_deep_bn(in_ch, out_width, k, n1=8, n2=16, linear_size=100): 
+    def group(inf, outf, N): 
+        if N == 1: 
+            conv = [nn.Conv2d(inf, outf, 4, stride=2, padding=1, bias=False), 
+                    nn.BatchNorm2d(outf),
+                    nn.ReLU()]
+        else: 
+            conv = [nn.Conv2d(inf, outf, 3, stride=1, padding=1, bias=False), 
+                    nn.BatchNorm2d(outf),
+                    nn.ReLU()]
+            for _ in range(1,N-1):
+                conv.append(nn.Conv2d(outf, outf, 3, stride=1, padding=1, bias=False))
+                conv.append(nn.BatchNorm2d(outf))
+                conv.append(nn.ReLU())
+            conv.append(nn.Conv2d(outf, outf, 4, stride=2, padding=1, bias=False))
+            conv.append(nn.BatchNorm2d(outf))
+            conv.append(nn.ReLU())
+        return conv
+
+    conv1 = group(in_ch, n1, k)
+    conv2 = group(n1, n2, k)
+
+
+    model = nn.Sequential(
+        *conv1, 
+        *conv2,
+        Flatten(),
+        nn.Linear(n2*out_width*out_width,linear_size),
+        nn.ReLU(),
+        nn.Linear(100, 10)
+    )
+    return model
+
+def mnist_model_deep_bn(): 
+    # use 4 layers which doesn't converge without bn
+    return model_deep_bn(1,7,4)
 
 def mnist_model_bn(): 
     model = nn.Sequential(

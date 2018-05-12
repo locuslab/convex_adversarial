@@ -59,6 +59,12 @@ if __name__ == "__main__":
         print("Using deep model with model_factor={}".format(args.model_factor))
         _, test_loader = pblm.mnist_loaders(64//(2**args.model_factor))
         model = pblm.mnist_model_deep(args.model_factor).cuda()
+    elif args.model =='deepwide': 
+        model = pblm.mnist_model_deep_wide().cuda()
+        _, test_loader = pblm.mnist_loaders(1)
+    elif args.model == 'deepbn': 
+        model = pblm.mnist_model_deep_bn().cuda()
+        _, test_loader = pblm.mnist_loaders(2)
     else: 
         model = pblm.mnist_model().cuda() 
         #model.load_state_dict(torch.load('l1_truth/mnist_nonexact_rerun_baseline_False_batch_size_50_delta_0.01_epochs_20_epsilon_0.1_l1_proj_200_l1_test_exact_l1_train_median_lr_0.001_m_10_seed_0_starting_epsilon_0.05_model.pth'))
