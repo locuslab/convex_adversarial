@@ -15,6 +15,7 @@ from trainer import *
 
 if __name__ == "__main__": 
     args = pblm.argparser(opt='adam', verbose=200, epsilon=0.01, starting_epsilon=0.001)
+    print("saving file to {}".format(args.prefix))
     setproctitle.setproctitle(args.prefix) 
 
     train_log = open(args.prefix + "_train.log", "w")
