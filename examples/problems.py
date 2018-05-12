@@ -531,6 +531,9 @@ def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3,
     parser.add_argument('--cuda_ids', default=None)
     parser.add_argument('--schedule_length', type=int, default=10)
 
+    parser.add_argument('--resnet_N', type=int, default=1)
+    parser.add_argument('--resnet_factor', type=int, default=1)
+
     
     args = parser.parse_args()
     if args.starting_epsilon is None:
