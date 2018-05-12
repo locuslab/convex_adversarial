@@ -7,7 +7,7 @@ if [ "${1}" != "" ]; then
 
     for factor in 1 2 4 8 16
     do
-        python examples/svhn.py --prefix ${prefix}/mnist_${factor} ${args} \
+        python examples/svhn.py --prefix ${prefix}/svhn_${factor} ${args} \
                                  --model wide \
                                  --model_factor ${factor} \
                                  --l1_proj 50 \
