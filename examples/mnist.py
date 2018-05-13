@@ -65,6 +65,10 @@ if __name__ == "__main__":
     elif args.model == 'deepbn': 
         model = pblm.mnist_model_deep_bn().cuda()
         _, test_loader = pblm.mnist_loaders(2)
+    elif args.model == 'threshold': 
+        model = pblm.mnist_model_threshold().cuda()
+    elif args.model == 'kernel8': 
+        model = pblm.mnist_model_kernel().cuda()
     else: 
         model = pblm.mnist_model().cuda() 
         #model.load_state_dict(torch.load('l1_truth/mnist_nonexact_rerun_baseline_False_batch_size_50_delta_0.01_epochs_20_epsilon_0.1_l1_proj_200_l1_test_exact_l1_train_median_lr_0.001_m_10_seed_0_starting_epsilon_0.05_model.pth'))
