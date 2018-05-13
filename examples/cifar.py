@@ -50,7 +50,7 @@ if __name__ == "__main__":
         if args.l1_test == 'exact': 
             _, test_loader = pblm.cifar_loaders(1, shuffle_test=True)
             test_loader = [tl for i,tl in enumerate(test_loader) if i < 1000]
-    elif 'resnet' in args.model: 
+    elif args.model == 'resnet': 
         model = pblm.cifar_model_resnet(N=args.resnet_N, factor=args.resnet_factor).cuda()
         if args.l1_test == 'exact': 
             _, test_loader = pblm.cifar_loaders(1, shuffle_test=True)
