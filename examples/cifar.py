@@ -116,7 +116,7 @@ if __name__ == "__main__":
             if err < best_err: 
                 best_err = err
                 torch.save({
-                    'state_dict' : model.state_dict, 
+                    'state_dict' : model.state_dict(), 
                     'err' : best_err,
                     'epoch' : t
                     }, args.prefix + "_best.pth")
