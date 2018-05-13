@@ -31,6 +31,8 @@ if __name__ == "__main__":
         model = pblm.svhn_model_deep(args.model_factor).cuda()
     elif args.model == 'wide': 
         model = pblm.svhn_model_wide(args.model_factor).cuda()
+    elif 'resnet' in args.model: 
+        model = pblm.cifar_model_resnet(N=args.resnet_N, factor=args.resnet_factor).cuda()
     else: 
         model = pblm.svhn_model().cuda()
 
