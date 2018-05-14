@@ -41,6 +41,7 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
         opt.zero_grad()
         robust_ce.backward()
 
+
         if clip_grad: 
             nn.utils.clip_grad_norm(model.parameters(), clip_grad)
 
@@ -58,7 +59,8 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
 
         print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err, file=log)
 
-        if verbose and i % verbose == 0: 
+        if verbose: 
+            endline = '\n' if i % verbose == 0 else '\r'
             print('Epoch: [{0}][{1}/{2}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
@@ -68,10 +70,11 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
                   'Error {errors.val:.3f} ({errors.avg:.3f})'.format(
                    epoch, i, len(loader), batch_time=batch_time,
                    data_time=data_time, loss=losses, errors=errors, 
-                   rloss = robust_losses, rerrors = robust_errors))
+                   rloss = robust_losses, rerrors = robust_errors), end=endline)
         log.flush()
 
         del X, y, robust_ce, out, ce, err, robust_err
+    print('')
     torch.cuda.empty_cache()
 
 
@@ -373,7 +376,8 @@ def robust_loss_cascade(models, epsilon, X, y, **kwargs):
         certified = ~uncertified
         l = []
         if certified.sum() == 0: 
-            print("Warning: Cascade stage {} has no certified values.".format(j+1))
+            pass
+            # print("Warning: Cascade stage {} has no certified values.".format(j+1))
         else: 
             # print("stage {}: certified {}".format(j, certified.sum()))
             X_cert = X[Variable(certified.nonzero()[:,0])]
@@ -451,7 +455,10 @@ def sampler_robust_cascade(loader, models, epsilon, **kwargs):
     l = []
 
     start = 0
+    total = 0
     for i, (X,y) in enumerate(loader): 
+        print('Certifying minibatch {}/{} [current total: {}/{}]'.format(i, len(loader), total, len(dataset)), end='\r')
+
         X = X.cuda()
         y = y.cuda()
 
@@ -461,10 +468,13 @@ def sampler_robust_cascade(loader, models, epsilon, **kwargs):
                                                    **kwargs)
         if uncertified is not None: 
             l.append(uncertified+start)
+            total += len(uncertified)
 
         start += X.size(0)
 
     total = torch.cat(l)
+    # torch.save(total, 'cascade_stage_2_svhn_indices.pth')
+    # assert False
     sampler = torch.utils.data.sampler.SubsetRandomSampler(total)
     return torch.utils.data.DataLoader(dataset, batch_size=loader.batch_size, shuffle=False, pin_memory=True, sampler=sampler)
 
@@ -514,7 +524,8 @@ def train_robust_cascade(loader, models, opt, epsilon, epoch, log, verbose,
 
         print(epoch, i, robust_ce.data[0], robust_err, ce, err, file=log)
 
-        if verbose and i % verbose == 0: 
+        if verbose:
+            endline = '\n' if  i % verbose == 0 else '\r'
             print('Epoch: [{0}][{1}/{2}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
@@ -524,7 +535,7 @@ def train_robust_cascade(loader, models, opt, epsilon, epoch, log, verbose,
                   'Error {errors.val:.3f} ({errors.avg:.3f})'.format(
                    epoch, i, len(loader), batch_time=batch_time,
                    data_time=data_time, loss=losses, errors=errors, 
-                   rloss = robust_losses, rerrors = robust_errors))
+                   rloss = robust_losses, rerrors = robust_errors), end=endline)
         log.flush()
 
         del X, y, robust_ce, ce, err, robust_err
@@ -574,7 +585,8 @@ def evaluate_robust_cascade(loader, models, epsilon, epoch, log, verbose, **kwar
 
         print(epoch, i, robust_ce.data[0], robust_err, ce, err,
            file=log)
-        if verbose and i % verbose == 0: 
+        if verbose: 
+            endline = '\n' if  i % verbose == 0 else '\r'
             # print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err)
             print('Test: [{0}/{1}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
@@ -584,7 +596,7 @@ def evaluate_robust_cascade(loader, models, epsilon, epoch, log, verbose, **kwar
                   'Error {error.val:.3f} ({error.avg:.3f})'.format(
                       i, len(loader), batch_time=batch_time, 
                       loss=losses, error=errors, rloss = robust_losses, 
-                      rerrors = robust_errors))
+                      rerrors = robust_errors), end=endline)
         log.flush()
 
         del X, y, robust_ce, ce
