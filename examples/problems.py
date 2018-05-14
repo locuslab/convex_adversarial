@@ -291,6 +291,17 @@ def svhn_loaders(batch_size):
     test_loader = torch.utils.data.DataLoader(test, batch_size=batch_size, shuffle=False, pin_memory=True)
     return train_loader, test_loader
 
+def svhn_second_stage_loaders(batch_size): 
+    train = datasets.SVHN(".", split='train', download=True, transform=transforms.ToTensor(), target_transform=replace_10_with_0)
+    test = datasets.SVHN(".", split='test', download=True, transform=transforms.ToTensor(), target_transform=replace_10_with_0)
+    
+    total = torch.load('cascade_stage_2_svhn_indices.pth')
+    sampler = torch.utils.data.sampler.SubsetRandomSampler(total)
+    train_loader = torch.utils.data.DataLoader(train, batch_size=batch_size, shuffle=False, pin_memory=True, sampler=sampler)
+    test_loader = torch.utils.data.DataLoader(test, batch_size=batch_size, shuffle=False, pin_memory=True, sampler=sampler)
+    return train_loader, test_loader
+
+
 def svhn_model(): 
     model = nn.Sequential(
         nn.Conv2d(3, 16, 4, stride=2, padding=1),
@@ -570,6 +581,8 @@ def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3,
     parser.add_argument('--resnet_factor', type=int, default=1)
 
     parser.add_argument('--cascade', type=int, default=None)
+    parser.add_argument('--load')
+
 
     
     args = parser.parse_args()
@@ -593,7 +606,7 @@ def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3,
         else:
             banned = ['alpha_grad', 'scatter_grad', 'verbose', 'prefix',
                       'resume', 'baseline', 'eval', 
-                      'method', 'model', 'cuda_ids']
+                      'method', 'model', 'cuda_ids', 'load']
             if args.method == 'baseline':
                 banned += ['epsilon', 'starting_epsilon', 'schedule_length', 
                            'l1_test', 'l1_train', 'm', 'l1_proj']

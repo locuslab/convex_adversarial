@@ -129,7 +129,7 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose, **kwargs):
 
         del X, y, robust_ce, out, ce
     torch.cuda.empty_cache()
-
+    print('')
     print(' * Robust error {rerror.avg:.3f}\t'
           'Error {error.avg:.3f}'
           .format(rerror=robust_errors, error=errors))
