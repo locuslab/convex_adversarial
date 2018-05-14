@@ -326,81 +326,85 @@ def robust_loss_cascade(models, epsilon, X, y, **kwargs):
 
     batch_size = X.size(0)
 
+    I = torch.arange(X.size(0)).type_as(y.data)
+
     for j,model in enumerate(models[:-1]): 
 
         out = model(Variable(X.data, volatile=True))
         ce = nn.CrossEntropyLoss(reduce=False)(out, y)
-        err = (out.data.max(1)[1] != y.data).float()
+        ######################################################################
+        # err = (out.data.max(1)[1] != y.data).float()
 
-        robust_ce, robust_err = robust_loss(models[-1], epsilon, 
-                                             X, 
-                                             y, 
-                                             size_average=False,
-                                             **kwargs)
+        # robust_ce, robust_err = robust_loss(models[-1], epsilon, 
+        #                                      X, 
+        #                                      y, 
+        #                                      size_average=False,
+        #                                      **kwargs)
 
-        total_robust_ce += robust_ce.sum()
-        total_ce += ce.data.sum()
+        # total_robust_ce += robust_ce.sum()
+        # total_ce += ce.data.sum()
 
-        _, uncertified = robust_loss(model, epsilon, 
-                                     Variable(X.data, volatile=True), 
-                                     Variable(out.data.max(1)[1].squeeze()), 
-                                     size_average=False,
-                                     **kwargs)
-
-        if (~uncertified).sum() > 0: 
-            total_robust_err += robust_err[(~uncertified).nonzero()[:,0]].sum()
-            total_err += err[(~uncertified).nonzero()[:,0]].sum()
-
-        if uncertified.sum() > 0: 
-            X = X[Variable(uncertified.nonzero()[:,0])]
-            y = y[Variable(uncertified.nonzero()[:,0])]
-        else: 
-            robust_ce = total_robust_ce/batch_size
-            ce = total_ce/batch_size
-            robust_err = total_robust_err/batch_size
-            err = total_err/batch_size
-            return robust_ce, robust_err, ce, err
-
-        ###################################################################
         # _, uncertified = robust_loss(model, epsilon, 
         #                              Variable(X.data, volatile=True), 
         #                              Variable(out.data.max(1)[1].squeeze()), 
         #                              size_average=False,
         #                              **kwargs)
-        # certified = ~uncertified
-        # l = []
-        # if certified.sum() == 0: 
-        #     print("Warning: Cascade stage {} has no certified values.".format(j+1))
-        # else: 
-        #     # print("stage {}: certified {}".format(j, certified.sum()))
-        #     X_cert = X[Variable(certified.nonzero()[:,0])]
-        #     y_cert = y[Variable(certified.nonzero()[:,0])]
 
-        #     ce = ce[Variable(certified.nonzero()[:,0])]
-        #     out = out[Variable(certified.nonzero()[:,0])]
-        #     err = (out.data.max(1)[1] != y_cert.data).float()
-        #     robust_ce, robust_err = robust_loss(model, epsilon, 
-        #                                          X_cert, 
-        #                                          y_cert, 
-        #                                          size_average=False,
-        #                                          **kwargs)
+        # if (~uncertified).sum() > 0: 
+        #     total_robust_err += robust_err[(~uncertified).nonzero()[:,0]].sum()
+        #     total_err += err[(~uncertified).nonzero()[:,0]].sum()
+
+        # if uncertified.sum() > 0: 
+        #     X = X[Variable(uncertified.nonzero()[:,0])]
+        #     y = y[Variable(uncertified.nonzero()[:,0])]
+        # else: 
+        #     robust_ce = total_robust_ce/batch_size
+        #     ce = total_ce/batch_size
+        #     robust_err = total_robust_err/batch_size
+        #     err = total_err/batch_size
+        #     return robust_ce, robust_err, ce, err
+
+        ###################################################################
+        _, uncertified = robust_loss(model, epsilon, 
+                                     Variable(X.data, volatile=True), 
+                                     Variable(out.data.max(1)[1].squeeze()), 
+                                     size_average=False,
+                                     **kwargs)
+        certified = ~uncertified
+        l = []
+        if certified.sum() == 0: 
+            print("Warning: Cascade stage {} has no certified values.".format(j+1))
+        else: 
+            # print("stage {}: certified {}".format(j, certified.sum()))
+            X_cert = X[Variable(certified.nonzero()[:,0])]
+            y_cert = y[Variable(certified.nonzero()[:,0])]
+
+            ce = ce[Variable(certified.nonzero()[:,0])]
+            out = out[Variable(certified.nonzero()[:,0])]
+            err = (out.data.max(1)[1] != y_cert.data).float()
+            robust_ce, robust_err = robust_loss(model, epsilon, 
+                                                 X_cert, 
+                                                 y_cert, 
+                                                 size_average=False,
+                                                 **kwargs)
             
-        #     # add statistics for certified examples
-        #     total_robust_ce += robust_ce.sum()
-        #     total_ce += ce.data.sum()
-        #     total_robust_err += robust_err.sum()
-        #     total_err += err.sum()
-        #     l.append(certified.sum())
-        #     # reduce data set to uncertified examples
-        #     if uncertified.sum() > 0: 
-        #         X = X[Variable(uncertified.nonzero()[:,0])]
-        #         y = y[Variable(uncertified.nonzero()[:,0])]
-        #     else: 
-        #         robust_ce = total_robust_ce/batch_size
-        #         ce = total_ce/batch_size
-        #         robust_err = total_robust_err/batch_size
-        #         err = total_err/batch_size
-        #         return robust_ce, robust_err, ce, err
+            # add statistics for certified examples
+            total_robust_ce += robust_ce.sum()
+            total_ce += ce.data.sum()
+            total_robust_err += robust_err.sum()
+            total_err += err.sum()
+            l.append(certified.sum())
+            # reduce data set to uncertified examples
+            if uncertified.sum() > 0: 
+                X = X[Variable(uncertified.nonzero()[:,0])]
+                y = y[Variable(uncertified.nonzero()[:,0])]
+                I = I[uncertified.nonzero()[:,0]]
+            else: 
+                robust_ce = total_robust_ce/batch_size
+                ce = total_ce/batch_size
+                robust_err = total_robust_err/batch_size
+                err = total_err/batch_size
+                return robust_ce, robust_err, ce, err, None
         ####################################################################
 
 
@@ -428,7 +432,42 @@ def robust_loss_cascade(models, epsilon, X, y, **kwargs):
     robust_err = total_robust_err/batch_size
     err = total_err/batch_size
 
-    return robust_ce, robust_err, ce, err
+    _, uncertified = robust_loss(models[-1], epsilon, 
+                                 Variable(X.data, volatile=True), 
+                                 Variable(out.data.max(1)[1].squeeze()), 
+                                 size_average=False,
+                                 **kwargs)
+    if uncertified.sum() > 0: 
+        I = I[uncertified.nonzero()[:,0]]
+    else:
+        I = None
+
+    return robust_ce, robust_err, ce, err, I
+
+def sampler_robust_cascade(loader, models, epsilon, **kwargs): 
+    dataset = loader.dataset 
+    loader = torch.utils.data.DataLoader(dataset, batch_size=loader.batch_size, shuffle=False, pin_memory=True)
+
+    l = []
+
+    start = 0
+    for i, (X,y) in enumerate(loader): 
+        X = X.cuda()
+        y = y.cuda()
+
+        _, _, _, _, uncertified = robust_loss_cascade(models, epsilon, 
+                                                   Variable(X, volatile=True), 
+                                                   Variable(y), 
+                                                   **kwargs)
+        if uncertified is not None: 
+            l.append(uncertified+start)
+
+        start += X.size(0)
+
+    total = torch.cat(l)
+    sampler = torch.utils.data.sampler.SubsetRandomSampler(total)
+    return torch.utils.data.DataLoader(dataset, batch_size=loader.batch_size, shuffle=False, pin_memory=True, sampler=sampler)
+
 
 def train_robust_cascade(loader, models, opt, epsilon, epoch, log, verbose, 
                  clip_grad=None, 
@@ -450,7 +489,7 @@ def train_robust_cascade(loader, models, opt, epsilon, epoch, log, verbose,
             y = y.squeeze(1)
         data_time.update(time.time() - end)
 
-        robust_ce, robust_err, ce, err = robust_loss_cascade(models, 
+        robust_ce, robust_err, ce, err, _ = robust_loss_cascade(models, 
                                                              epsilon, 
                                                              Variable(X), 
                                                              Variable(y), 
@@ -508,7 +547,7 @@ def evaluate_robust_cascade(loader, models, epsilon, epoch, log, verbose, **kwar
         if y.dim() == 2: 
             y = y.squeeze(1)
 
-        robust_ce, robust_err, ce, err = robust_loss_cascade(models, 
+        robust_ce, robust_err, ce, err, _ = robust_loss_cascade(models, 
                                                              epsilon, 
                                                              Variable(X, volatile=True), 
                                                              Variable(y, volatile=True), 
