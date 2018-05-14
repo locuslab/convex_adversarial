@@ -41,9 +41,6 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
         opt.zero_grad()
         robust_ce.backward()
 
-        for p in model.parameters(): 
-            p.grad.data.clamp_(min=-10, max=10)
-
         if clip_grad: 
             nn.utils.clip_grad_norm(model.parameters(), clip_grad)
 
@@ -100,7 +97,7 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose, **kwargs):
         ce = nn.CrossEntropyLoss()(out, Variable(y))
         err = (out.data.max(1)[1] != y).float().sum()  / X.size(0)
 
-        _,pgd_err = _pgd(model, Variable(X), Variable(y), epsilon)
+        # _,pgd_err = _pgd(model, Variable(X), Variable(y), epsilon)
 
         # measure accuracy and record loss
         losses.update(ce.data[0], X.size(0))
@@ -319,6 +316,246 @@ def evaluate_madry(loader, model, epsilon, epoch, log, verbose):
     print(' * PGD error {perror.avg:.3f}\t'
           'Error {error.avg:.3f}'
           .format(error=errors, perror=perrors))
+
+
+def robust_loss_cascade(models, epsilon, X, y, **kwargs): 
+    total_robust_ce = 0
+    total_ce = 0
+    total_robust_err = 0
+    total_err = 0
+
+    batch_size = X.size(0)
+
+    for j,model in enumerate(models[:-1]): 
+
+        out = model(Variable(X.data, volatile=True))
+        ce = nn.CrossEntropyLoss(reduce=False)(out, y)
+        err = (out.data.max(1)[1] != y.data).float()
+
+        robust_ce, robust_err = robust_loss(models[-1], epsilon, 
+                                             X, 
+                                             y, 
+                                             size_average=False,
+                                             **kwargs)
+
+        total_robust_ce += robust_ce.sum()
+        total_ce += ce.data.sum()
+
+        _, uncertified = robust_loss(model, epsilon, 
+                                     Variable(X.data, volatile=True), 
+                                     Variable(out.data.max(1)[1].squeeze()), 
+                                     size_average=False,
+                                     **kwargs)
+
+        if (~uncertified).sum() > 0: 
+            total_robust_err += robust_err[(~uncertified).nonzero()[:,0]].sum()
+            total_err += err[(~uncertified).nonzero()[:,0]].sum()
+
+        if uncertified.sum() > 0: 
+            X = X[Variable(uncertified.nonzero()[:,0])]
+            y = y[Variable(uncertified.nonzero()[:,0])]
+        else: 
+            robust_ce = total_robust_ce/batch_size
+            ce = total_ce/batch_size
+            robust_err = total_robust_err/batch_size
+            err = total_err/batch_size
+            return robust_ce, robust_err, ce, err
+
+        ###################################################################
+        # _, uncertified = robust_loss(model, epsilon, 
+        #                              Variable(X.data, volatile=True), 
+        #                              Variable(out.data.max(1)[1].squeeze()), 
+        #                              size_average=False,
+        #                              **kwargs)
+        # certified = ~uncertified
+        # l = []
+        # if certified.sum() == 0: 
+        #     print("Warning: Cascade stage {} has no certified values.".format(j+1))
+        # else: 
+        #     # print("stage {}: certified {}".format(j, certified.sum()))
+        #     X_cert = X[Variable(certified.nonzero()[:,0])]
+        #     y_cert = y[Variable(certified.nonzero()[:,0])]
+
+        #     ce = ce[Variable(certified.nonzero()[:,0])]
+        #     out = out[Variable(certified.nonzero()[:,0])]
+        #     err = (out.data.max(1)[1] != y_cert.data).float()
+        #     robust_ce, robust_err = robust_loss(model, epsilon, 
+        #                                          X_cert, 
+        #                                          y_cert, 
+        #                                          size_average=False,
+        #                                          **kwargs)
+            
+        #     # add statistics for certified examples
+        #     total_robust_ce += robust_ce.sum()
+        #     total_ce += ce.data.sum()
+        #     total_robust_err += robust_err.sum()
+        #     total_err += err.sum()
+        #     l.append(certified.sum())
+        #     # reduce data set to uncertified examples
+        #     if uncertified.sum() > 0: 
+        #         X = X[Variable(uncertified.nonzero()[:,0])]
+        #         y = y[Variable(uncertified.nonzero()[:,0])]
+        #     else: 
+        #         robust_ce = total_robust_ce/batch_size
+        #         ce = total_ce/batch_size
+        #         robust_err = total_robust_err/batch_size
+        #         err = total_err/batch_size
+        #         return robust_ce, robust_err, ce, err
+        ####################################################################
+
+
+    # l.append(X.size(0))
+    # print(', '.join(str(s) for s in l))
+    # compute normal ce and robust ce for the last model
+    out = models[-1](Variable(X.data, volatile=True))
+    ce = nn.CrossEntropyLoss(reduce=False)(out, y)
+    err = (out.data.max(1)[1] != y.data).float()
+
+    robust_ce, robust_err = robust_loss(models[-1], epsilon, 
+                                         X, 
+                                         y, 
+                                         size_average=False,
+                                         **kwargs)
+
+    # update statistics with the remaining model and take the average 
+    total_robust_ce += robust_ce.sum()
+    total_ce += ce.data.sum()
+    total_robust_err += robust_err.sum()
+    total_err += err.sum()
+
+    robust_ce = total_robust_ce/batch_size
+    ce = total_ce/batch_size
+    robust_err = total_robust_err/batch_size
+    err = total_err/batch_size
+
+    return robust_ce, robust_err, ce, err
+
+def train_robust_cascade(loader, models, opt, epsilon, epoch, log, verbose, 
+                 clip_grad=None, 
+                 **kwargs):
+    batch_time = AverageMeter()
+    data_time = AverageMeter()
+    losses = AverageMeter()
+    errors = AverageMeter()
+    robust_losses = AverageMeter()
+    robust_errors = AverageMeter()
+
+    for model in models: 
+        model.train()
+
+    end = time.time()
+    for i, (X,y) in enumerate(loader):
+        X,y = X.cuda(), y.cuda().long()
+        if y.dim() == 2: 
+            y = y.squeeze(1)
+        data_time.update(time.time() - end)
+
+        robust_ce, robust_err, ce, err = robust_loss_cascade(models, 
+                                                             epsilon, 
+                                                             Variable(X), 
+                                                             Variable(y), 
+                                                             **kwargs)
+        opt.zero_grad()
+        robust_ce.backward()
+
+        if clip_grad: 
+            nn.utils.clip_grad_norm(model.parameters(), clip_grad)
+
+        opt.step()
+
+        # measure accuracy and record loss
+        losses.update(ce, X.size(0))
+        errors.update(err, X.size(0))
+        robust_losses.update(robust_ce.data[0], X.size(0))
+        robust_errors.update(robust_err, X.size(0))
+
+        # measure elapsed time
+        batch_time.update(time.time()-end)
+        end = time.time()
+
+        print(epoch, i, robust_ce.data[0], robust_err, ce, err, file=log)
+
+        if verbose and i % verbose == 0: 
+            print('Epoch: [{0}][{1}/{2}]\t'
+                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                  'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
+                  'Robust loss {rloss.val:.4f} ({rloss.avg:.4f})\t'
+                  'Robust error {rerrors.val:.3f} ({rerrors.avg:.3f})\t'
+                  'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
+                  'Error {errors.val:.3f} ({errors.avg:.3f})'.format(
+                   epoch, i, len(loader), batch_time=batch_time,
+                   data_time=data_time, loss=losses, errors=errors, 
+                   rloss = robust_losses, rerrors = robust_errors))
+        log.flush()
+
+        del X, y, robust_ce, ce, err, robust_err
+    torch.cuda.empty_cache()
+
+
+def evaluate_robust_cascade(loader, models, epsilon, epoch, log, verbose, **kwargs):
+    batch_time = AverageMeter()
+    losses = AverageMeter()
+    errors = AverageMeter()
+    robust_losses = AverageMeter()
+    robust_errors = AverageMeter()
+
+    for model in models:
+        model.eval()
+
+    end = time.time()
+    for i, (X,y) in enumerate(loader):
+        X,y = X.cuda(), y.cuda().long()
+        if y.dim() == 2: 
+            y = y.squeeze(1)
+
+        robust_ce, robust_err, ce, err = robust_loss_cascade(models, 
+                                                             epsilon, 
+                                                             Variable(X, volatile=True), 
+                                                             Variable(y, volatile=True), 
+                                                             **kwargs)
+        # robust_ce, robust_err = robust_loss(model, epsilon, 
+        #                                     Variable(X, volatile=True), 
+        #                                     Variable(y, volatile=True),
+        #                                      **kwargs)
+        # out = model(Variable(X))
+        # ce = nn.CrossEntropyLoss()(out, Variable(y))
+        # err = (out.data.max(1)[1] != y).float().sum()  / X.size(0)
+
+        # _,pgd_err = _pgd(model, Variable(X), Variable(y), epsilon)
+
+        # measure accuracy and record loss
+        losses.update(ce, X.size(0))
+        errors.update(err, X.size(0))
+        robust_losses.update(robust_ce.data[0], X.size(0))
+        robust_errors.update(robust_err, X.size(0))
+
+        # measure elapsed time
+        batch_time.update(time.time()-end)
+        end = time.time()
+
+        print(epoch, i, robust_ce.data[0], robust_err, ce, err,
+           file=log)
+        if verbose and i % verbose == 0: 
+            # print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err)
+            print('Test: [{0}/{1}]\t'
+                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                  'Robust loss {rloss.val:.3f} ({rloss.avg:.3f})\t'
+                  'Robust error {rerrors.val:.3f} ({rerrors.avg:.3f})\t'
+                  'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
+                  'Error {error.val:.3f} ({error.avg:.3f})'.format(
+                      i, len(loader), batch_time=batch_time, 
+                      loss=losses, error=errors, rloss = robust_losses, 
+                      rerrors = robust_errors))
+        log.flush()
+
+        del X, y, robust_ce, ce
+    torch.cuda.empty_cache()
+
+    print(' * Robust error {rerror.avg:.3f}\t'
+          'Error {error.avg:.3f}'
+          .format(rerror=robust_errors, error=errors))
+    return robust_errors.avg
+
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""

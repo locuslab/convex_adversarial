@@ -33,6 +33,8 @@ if __name__ == "__main__":
         model = pblm.svhn_model_wide(args.model_factor).cuda()
     elif args.model == 'resnet':
         model = pblm.cifar_model_resnet(N=args.resnet_N, factor=args.resnet_factor).cuda()
+    elif args.cascade is not None: 
+        model = [pblm.svhn_model().cuda() for _ in range(args.cascade)]
     else: 
         model = pblm.svhn_model().cuda()
 
@@ -53,7 +55,10 @@ if __name__ == "__main__":
         evaluate_robust(test_loader, model, args.epsilon, 0, test_log,
                         args.verbose, **kwargs)
     else: 
-        opt = optim.Adam(model.parameters(), lr=args.lr)
+        if args.cascade: 
+            opt = optim.Adam([p for m in model for p in m.parameters()], lr=args.lr)
+        else:   
+            opt = optim.Adam(model.parameters(), lr=args.lr)
         # opt = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum,
             # weight_decay=args.weight_decay)
         lr_scheduler = optim.lr_scheduler.StepLR(opt, step_size=20, gamma=0.5)
@@ -71,22 +76,30 @@ if __name__ == "__main__":
                     epsilon = float(eps_schedule[t])
                 else:
                     epsilon = args.epsilon
-                train_robust(train_loader, model, opt, epsilon, t, train_log, 
-                    args.verbose, l1_type=args.l1_train, **kwargs)
-                err = evaluate_robust(test_loader, model, args.epsilon, t, test_log,
-                   args.verbose, l1_type=args.l1_test, **kwargs)
+
+                if args.cascade: 
+                    train_robust_cascade(train_loader, model, opt, epsilon, t, train_log, 
+                        args.verbose, l1_type=args.l1_train, **kwargs)
+                    err = evaluate_robust_cascade(test_loader, model, args.epsilon, t, test_log,
+                       args.verbose, l1_type=args.l1_test, **kwargs)
+
+                else:
+                    train_robust(train_loader, model, opt, epsilon, t, train_log, 
+                        args.verbose, l1_type=args.l1_train, **kwargs)
+                    err = evaluate_robust(test_loader, model, args.epsilon, t, test_log,
+                       args.verbose, l1_type=args.l1_test, **kwargs)
             print('Epoch {}: {} err'.format(t, err))
             
             if err < best_err: 
                 best_err = err
                 torch.save({
-                    'state_dict' : model.state_dict, 
+                    'state_dict' : [m.state_dict() for m in model] if args.cascade else model.state_dict(), 
                     'err' : best_err,
                     'epoch' : t
                     }, args.prefix + "_best.pth")
                 
             torch.save({ 
-                'state_dict': model.state_dict(),
+                'state_dict': [m.state_dict() for m in model] if args.cascade else model.state_dict(),
                 'err' : err,
                 'epoch' : t
                 }, args.prefix + "_checkpoint.pth")

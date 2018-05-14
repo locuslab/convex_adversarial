@@ -648,5 +648,5 @@ def robust_loss(net, epsilon, X, y,
     err = (f.data.max(1)[1] != y.data)
     if size_average: 
         err = err.sum()/X.size(0)
-    ce_loss = nn.CrossEntropyLoss(size_average=size_average)(f, y)
+    ce_loss = nn.CrossEntropyLoss(reduce=size_average)(f, y)
     return ce_loss, err
