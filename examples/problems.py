@@ -103,6 +103,35 @@ def mnist_model():
     )
     return model
 
+
+def mnist_model_kernel(): 
+    model = nn.Sequential(
+        nn.Conv2d(1, 16, 8, stride=2, padding=3),
+        nn.ReLU(),
+        nn.Conv2d(16, 32, 8, stride=2, padding=3),
+        nn.ReLU(),
+        Flatten(),
+        nn.Linear(32*7*7,100),
+        nn.ReLU(),
+        nn.Linear(100, 10)
+    )
+    return model
+
+def mnist_model_threshold(): 
+    model = nn.Sequential(
+        nn.Conv2d(1, 16, 1, stride=1, padding=0),
+        nn.ReLU(),
+        nn.Conv2d(16, 16, 4, stride=2, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(16, 32, 4, stride=2, padding=1),
+        nn.ReLU(),
+        Flatten(),
+        nn.Linear(32*7*7,100),
+        nn.ReLU(),
+        nn.Linear(100, 10)
+    )
+    return model
+
 def mnist_model_deep_wide():
     # in filters, out width, depth, filters1, filters2
     return model_deep(1, 7, 3, n1=32, n2=64, linear_size=512) 
