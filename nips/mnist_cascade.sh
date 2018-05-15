@@ -4,7 +4,7 @@ if [ "${1}" != "" ] && [ "${2}" != "" ]; then
 
      mkdir -p $prefix
 
-     python examples/cifar.py --prefix ${prefix}/cifar \
+     python examples/mnist.py --prefix ${prefix}/mnist \
                               --cascade 10 \
                               --l1_proj 50 \
                               --l1_train median \

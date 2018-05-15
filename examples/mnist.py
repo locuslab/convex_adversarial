@@ -110,7 +110,7 @@ if __name__ == "__main__":
             sampler_indices = []
             model = [model]
             print('cascade training ')
-            for _ in range(1,args.cascade): 
+            for _ in range(0,args.cascade): 
                 if _ > 0: 
                     print("Loading checkpoint model")
                     d = torch.load(args.prefix+"_checkpoint.pth")
