@@ -11,6 +11,8 @@ import gc
 
 from attacks import _pgd
 
+DEBUG = False
+
 def train_robust(loader, model, opt, epsilon, epoch, log, verbose, 
                  clip_grad=None,
                  **kwargs):
@@ -74,6 +76,8 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
         log.flush()
 
         del X, y, robust_ce, out, ce, err, robust_err
+        if DEBUG and i ==10: 
+            break
     print('')
     torch.cuda.empty_cache()
 
@@ -424,6 +428,7 @@ def robust_loss_cascade(models, epsilon, X, y, **kwargs):
                                          y, 
                                          size_average=False,
                                          **kwargs)
+    # print(robust_err.sum())
 
     # update statistics with the remaining model and take the average 
     total_robust_ce += robust_ce.sum()
@@ -441,6 +446,8 @@ def robust_loss_cascade(models, epsilon, X, y, **kwargs):
                                  Variable(out.data.max(1)[1].squeeze()), 
                                  size_average=False,
                                  **kwargs)
+    # print(uncertified)
+    # print('\n')
     if uncertified.sum() > 0: 
         I = I[uncertified.nonzero()[:,0]]
     else:
@@ -469,8 +476,9 @@ def sampler_robust_cascade(loader, models, epsilon, **kwargs):
         if uncertified is not None: 
             l.append(uncertified+start)
             total += len(uncertified)
-
         start += X.size(0)
+        if DEBUG and i ==10: 
+            break
     print('')
     if len(l) > 0: 
         total = torch.cat(l)
@@ -483,7 +491,7 @@ def sampler_robust_cascade(loader, models, epsilon, **kwargs):
 
 
 def train_robust_cascade(loader, models, opt, epsilon, epoch, log, verbose, 
-                 clip_grad=None, 
+                 clip_grad=None,
                  **kwargs):
     batch_time = AverageMeter()
     data_time = AverageMeter()
@@ -542,6 +550,8 @@ def train_robust_cascade(loader, models, opt, epsilon, epoch, log, verbose,
         log.flush()
 
         del X, y, robust_ce, ce, err, robust_err
+        if DEBUG and i ==10: 
+            break
     torch.cuda.empty_cache()
 
 
@@ -603,6 +613,8 @@ def evaluate_robust_cascade(loader, models, epsilon, epoch, log, verbose, **kwar
         log.flush()
 
         del X, y, robust_ce, ce
+        if DEBUG and i == 10: 
+            break
     torch.cuda.empty_cache()
     print('')
     print(' * Robust error {rerror.avg:.3f}\t'
