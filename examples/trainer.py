@@ -471,6 +471,7 @@ def sampler_robust_cascade(loader, models, epsilon, **kwargs):
             total += len(uncertified)
 
         start += X.size(0)
+    print('')
     if len(l) > 0: 
         total = torch.cat(l)
         # torch.save(total, 'cascade_stage_2_svhn_indices.pth')
@@ -603,7 +604,7 @@ def evaluate_robust_cascade(loader, models, epsilon, epoch, log, verbose, **kwar
 
         del X, y, robust_ce, ce
     torch.cuda.empty_cache()
-
+    print('')
     print(' * Robust error {rerror.avg:.3f}\t'
           'Error {error.avg:.3f}'
           .format(rerror=robust_errors, error=errors))
