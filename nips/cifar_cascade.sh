@@ -13,7 +13,7 @@ if [ "${1}" != "" ] && [ "${2}" != "" ]; then
                               --epochs 100 \
                               --batch_size 50 \
                               --schedule_length 20 \
-                              --verbose 200 \
+                              --verbose 400 \
                               --cuda_ids ${1}
 else
     echo "Error: need to pass in GPU ids and epsilon to run script."
