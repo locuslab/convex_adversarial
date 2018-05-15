@@ -63,6 +63,7 @@ if __name__ == "__main__":
         model = pblm.cifar_model_deep(args.model_factor).cuda()
     else: 
         model = pblm.cifar_model().cuda() 
+        _, test_loader = pblm.cifar_loaders(25)
         #model.load_state_dict(torch.load('l1_truth/mnist_nonexact_rerun_baseline_False_batch_size_50_delta_0.01_epochs_20_epsilon_0.1_l1_proj_200_l1_test_exact_l1_train_median_lr_0.001_m_10_seed_0_starting_epsilon_0.05_model.pth'))
 
     for m in model.modules():
