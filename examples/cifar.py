@@ -90,19 +90,24 @@ if __name__ == "__main__":
               **kwargs)
     elif args.cascade: 
         model = [model]
+        sampler_indices = []
         print('cascade training ')
         for _ in range(args.cascade): 
             if _ > 0: 
                 print("Loading best model")
-                d = torch.load(args.prefix+"_best.pth")
-                model[-1].load_state_dict(d['state_dict'][-1])
+                d = torch.load(args.prefix+"_checkpoint.pth")
+                for i in range(_): 
+                    model[i].load_state_dict(d['state_dict'][i])
                 
-                print("Adding a new model")
-                model.append(pblm.cifar_model().cuda())
                 # also reduce dataset to just uncertified examples
+                print("Finding uncertified examples")
                 train_loader = sampler_robust_cascade(train_loader, model, args.epsilon, **kwargs)
                 if train_loader is None: 
                     break
+                sampler_indices.append(train_loader.sampler.indices)
+
+                print("Adding a new model")
+                model.append(pblm.cifar_model().cuda())
             
             
             opt = optim.SGD(model[-1].parameters(), lr=args.lr, momentum=args.momentum,
@@ -132,13 +137,15 @@ if __name__ == "__main__":
                     torch.save({
                         'state_dict' : [m.state_dict() for m in model], 
                         'err' : best_err,
-                        'epoch' : t
+                        'epoch' : t,
+                        'sampler_indices' : sampler_indices
                         }, args.prefix + "_best.pth")
                     
                 torch.save({ 
                     'state_dict': [m.state_dict() for m in model],
                     'err' : err,
-                    'epoch' : t
+                    'epoch' : t,
+                    'sampler_indices' : sampler_indices
                     }, args.prefix + "_checkpoint.pth")
     else: 
         # opt = optim.Adam(model.parameters(), lr=args.lr)
