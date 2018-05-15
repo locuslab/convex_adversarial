@@ -34,6 +34,7 @@ if __name__ == "__main__":
     elif args.model == 'resnet':
         model = pblm.cifar_model_resnet(N=args.resnet_N, factor=args.resnet_factor).cuda()
     else: 
+        _, test_loader = pblm.svhn_loaders(10)
         model = pblm.svhn_model().cuda()
 
     starting_epoch=0
