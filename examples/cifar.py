@@ -103,6 +103,7 @@ if __name__ == "__main__":
                 print("Finding uncertified examples")
                 train_loader = sampler_robust_cascade(train_loader, model, args.epsilon, **kwargs)
                 if train_loader is None: 
+                    print('No more examples, terminating')
                     break
                 sampler_indices.append(train_loader.sampler.indices)
 
