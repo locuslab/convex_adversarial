@@ -66,6 +66,8 @@ if __name__ == "__main__":
                 model.append(pblm.svhn_model().cuda())
                 # also reduce dataset to just uncertified examples
                 train_loader = sampler_robust_cascade(train_loader, model, args.epsilon, **kwargs)
+                if train_loader is None: 
+                    break
             
             
             opt = optim.Adam(model[-1].parameters(), lr=args.lr)

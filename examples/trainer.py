@@ -471,12 +471,14 @@ def sampler_robust_cascade(loader, models, epsilon, **kwargs):
             total += len(uncertified)
 
         start += X.size(0)
-
-    total = torch.cat(l)
-    # torch.save(total, 'cascade_stage_2_svhn_indices.pth')
-    # assert False
-    sampler = torch.utils.data.sampler.SubsetRandomSampler(total)
-    return torch.utils.data.DataLoader(dataset, batch_size=loader.batch_size, shuffle=False, pin_memory=True, sampler=sampler)
+    if len(l) > 0: 
+        total = torch.cat(l)
+        # torch.save(total, 'cascade_stage_2_svhn_indices.pth')
+        # assert False
+        sampler = torch.utils.data.sampler.SubsetRandomSampler(total)
+        return torch.utils.data.DataLoader(dataset, batch_size=loader.batch_size, shuffle=False, pin_memory=True, sampler=sampler)
+    else:
+        return None
 
 
 def train_robust_cascade(loader, models, opt, epsilon, epoch, log, verbose, 
