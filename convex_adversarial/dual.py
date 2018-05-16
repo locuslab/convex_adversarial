@@ -528,6 +528,48 @@ class DualSequential():
         else:
             return 0
 
+def select_input(X, epsilon, l1_proj, l1_type, bounded_input):
+    if l1_proj is not None and l1_type=='median' and X[0].numel() > l1_proj:
+        if bounded_input: 
+            return InfBallProjBounded(X,epsilon,l1_proj)
+        else: 
+            return InfBallProj(X,epsilon,l1_proj)
+    else:
+        if bounded_input: 
+            return InfBallBounded(X, epsilon)
+        else:
+            return InfBall(X, epsilon)
+
+def select_layer(layer, dual_net, X, l1_proj, l1_type, in_f, out_f, dense_ti, zsi):
+    if isinstance(layer, nn.Linear): 
+        return DualLinear(layer, out_f)
+    elif isinstance(layer, nn.Conv2d): 
+        return DualConv2d(layer, out_f)
+    elif isinstance(layer, nn.ReLU):   
+        zl, zu = zip(*[l.fval() for l in dual_net])
+        zl, zu = sum(zl), sum(zu)
+
+        d = (zl >= 0).detach().type_as(X)
+        I = ((zu > 0).detach() * (zl < 0).detach())
+        if I.data.sum() > 0:
+            d[I] += zu[I]/(zu[I] - zl[I])
+
+        if l1_proj is not None and l1_type=='median' and I.data.sum() > l1_proj:
+            return DualReLUProj(I, d, zl, l1_proj)
+        else:
+            return DualReLU(I, d, zl)
+
+    elif 'Flatten' in (str(layer.__class__.__name__)): 
+        return DualReshape(in_f, out_f)
+    elif isinstance(layer, Dense): 
+        assert isinstance(dense_t[i], Dense)
+        return DualDense(layer, dense_ti, dual_net, out_f)
+    elif isinstance(layer, nn.BatchNorm2d):
+        return DualBatchNorm2d(layer, zsi, out_f)
+    else:
+        print(layer)
+        raise ValueError("No module for layer {}".format(str(layer.__class__.__name__)))
+
 class DualNetBounds: 
     def __init__(self, net, X, epsilon, alpha_grad=False, scatter_grad=False, 
                  l1_proj=None, l1_eps=None, m=None,
@@ -557,49 +599,15 @@ class DualNetBounds:
 
 
         # Use the bounded boxes
-        if l1_proj is not None and l1_type=='median' and X[0].numel() > l1_proj:
-            if bounded_input: 
-                dual_net = [InfBallProjBounded(X,epsilon,l1_proj)]
-            else: 
-                dual_net = [InfBallProj(X,epsilon,l1_proj)]
-        else:
-            if bounded_input: 
-                dual_net = [InfBallBounded(X, epsilon)]
-            else:
-                dual_net = [InfBall(X, epsilon)]
+        dual_net = [select_input(X, epsilon, l1_proj, l1_type, bounded_input)]
 
         if any(isinstance(l, Dense) for l in net): 
             dense_t = Aff.transpose_all(net)
+        else: 
+            dense_t = [None]*len(net)
 
         for i,(in_f,out_f,layer) in enumerate(zip(nf[:-1], nf[1:], net)): 
-            if isinstance(layer, nn.Linear): 
-                dual_layer = DualLinear(layer, out_f)
-            elif isinstance(layer, nn.Conv2d): 
-                dual_layer = DualConv2d(layer, out_f)
-            elif isinstance(layer, nn.ReLU): 
-                zl, zu = zip(*[l.fval() for l in dual_net])
-                zl, zu = sum(zl), sum(zu)
-
-                d = (zl >= 0).detach().type_as(X)
-                I = ((zu > 0).detach() * (zl < 0).detach())
-                if I.data.sum() > 0:
-                    d[I] += zu[I]/(zu[I] - zl[I])
-
-                if l1_proj is not None and l1_type=='median' and I.data.sum() > l1_proj:
-                    dual_layer = DualReLUProj(I, d, zl, l1_proj)
-                else:
-                    dual_layer = DualReLU(I, d, zl)
-
-            elif 'Flatten' in (str(layer.__class__.__name__)): 
-                dual_layer = DualReshape(in_f, out_f)
-            elif isinstance(layer, Dense): 
-                assert isinstance(dense_t[i], Dense)
-                dual_layer = DualDense(layer, dense_t[i], dual_net, out_f)
-            elif isinstance(layer, nn.BatchNorm2d):
-                dual_layer = DualBatchNorm2d(layer, zs[i], out_f)
-            else:
-                print(layer)
-                raise ValueError("No module for layer {}".format(str(layer.__class__.__name__)))
+            dual_layer = select_layer(layer, dual_net, X, l1_proj, l1_type, in_f, out_f, dense_t[i], zs[i])
 
             # skip last layer
             if i < len(net)-1: 
@@ -645,6 +653,119 @@ def robust_loss(net, epsilon, X, y,
                 size_average=True, device_ids=None, **kwargs):
     f = nn.DataParallel(RobustBounds(net, epsilon, **kwargs),
                         device_ids=None)(X,y)
+    err = (f.data.max(1)[1] != y.data)
+    if size_average: 
+        err = err.sum()/X.size(0)
+    ce_loss = nn.CrossEntropyLoss(reduce=size_average)(f, y)
+    return ce_loss, err
+
+class DualSequential(nn.Module): 
+    def __init__(self, dual_layers): 
+        super(DualSequential, self).__init__()
+        self.dual_layers = dual_layers
+        pass
+    def forward(self, x, I_ind=None): 
+        zs = [x]
+        for l in self.dual_layers[1:]: 
+            if isinstance(l, DualDense): 
+                zs.append(l.affine(*zs))
+            elif isinstance(l, DualReLU): 
+                zs.append(l.affine(zs[-1], I_ind=I_ind))
+            else:
+                zs.append(l.affine(zs[-1]))
+        return zs[-1]
+
+def robust_loss_parallel(net, epsilon, X, y, l1_proj=None, l1_eps=None, m=None,
+                 l1_type='exact', bounded_input=False, size_average=True): 
+    if any('BatchNorm2d' in str(l.__class__.__name__) for l in net): 
+        raise NotImplementedError
+
+    zs = [Variable(X.data[:1], volatile=True)]
+    nf = [zs[0].size()]
+    for l in net: 
+        if isinstance(l, Dense): 
+            zs.append(l(*zs))
+        else:
+            zs.append(l(zs[-1]))
+        nf.append(zs[-1].size())
+
+    dual_net = [select_input(X, epsilon, l1_proj, l1_type, bounded_input)]
+
+    if any(isinstance(l, Dense) for l in net): 
+        dense_t = Aff.transpose_all(net)
+    else: 
+        dense_t = [None]*len(net)
+
+    eye = Variable(dual_net[0].nu_1[0].data, volatile=True)
+    x = Variable(dual_net[0].nu_x[0].data, volatile=True)
+
+    for i,(in_f,out_f,layer) in enumerate(zip(nf[:-1], nf[1:], net)): 
+        if isinstance(layer, nn.ReLU): 
+            # compute bounds
+            D = nn.DataParallel(DualSequential(dual_net))
+
+            # should be negative, but doesn't matter with abs()
+            nu_1 = D(dual_net[0].nu_1[0]).abs().sum(1)
+            nu_x = D(dual_net[0].nu_x[0])
+            rest = 0
+            rest_l = 0
+            rest_u = 0
+            for i,dual_layer in enumerate(dual_net[1:]): 
+                D = DualSequential(dual_net[i+1:])
+                if isinstance(dual_layer, (DualLinear, DualConv2d)): 
+                    b = Variable(dual_layer.bias[0].data, volatile=True)
+                    if isinstance(dual_layer, DualConv2d): 
+                        b = b.unsqueeze(0)
+                    rest += D(b)
+                elif isinstance(dual_layer, DualReshape):
+                    continue
+                elif isinstance(dual_layer, DualReLU):
+                    D = nn.DataParallel(D)
+                    nu0 = D(Variable(dual_layer.nus[0].data,volatile=True), I_ind=dual_layer.I_ind)
+
+                    nu = nu0.view(nu0.size(0), -1)
+                    zlI = dual_layer.zl[dual_layer.I]
+                    zl = (zlI * (-nu.t()).clamp(min=0)).mm(dual_layer.I_collapse).t().contiguous()
+                    zu = -(zlI * nu.t().clamp(min=0)).mm(dual_layer.I_collapse).t().contiguous()
+                    
+                    rest_l += zl.view(-1, *(nu0.size()[1:]))
+                    rest_u += zu.view(-1, *(nu0.size()[1:]))
+                else: 
+                    print(dual_layer)
+                    raise NotImplementedError
+            zl = nu_x + rest - epsilon*nu_1 + rest_l
+            zu = nu_x + rest + epsilon*nu_1 + rest_u
+            # nu_x - epsilon*nu_1 is verified
+            # print(nu_x - epsilon*nu_1)
+
+            d = (zl >= 0).detach().type_as(X)
+            I = ((zu > 0).detach() * (zl < 0).detach())
+            if I.data.sum() > 0:
+                d[I] += zu[I]/(zu[I] - zl[I])
+
+            dual_layer = DualReLU(I, d, zl)
+        else:
+            dual_layer = select_layer(layer, dual_net, X, l1_proj, l1_type, in_f, out_f, dense_t[i], zs[i])
+        
+        dual_net.append(dual_layer)
+
+
+    num_classes = net[-1].out_features
+    c = Variable(torch.eye(num_classes).type_as(X.data)[y.data].unsqueeze(1) - torch.eye(num_classes).type_as(X.data).unsqueeze(0))
+    if X.is_cuda:
+        c = c.cuda()
+
+    # same as f = -dual.g(c)
+    nu = [-c]
+    for l in reversed(dual_net[1:]): 
+        nu.append(l.affine_transpose(*nu))
+    
+    nu.append(None)
+    nu = list(reversed(nu))
+
+    f = -sum(l.fval(nu=n, nu_prev=nprev) 
+        for l,nprev,n in zip(dual_net, nu[:-1],nu[1:]))
+
     err = (f.data.max(1)[1] != y.data)
     if size_average: 
         err = err.sum()/X.size(0)
