@@ -118,8 +118,9 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose, **kwargs):
 
         print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err,
            file=log)
-        if verbose and i % verbose == 0: 
+        if verbose: 
             # print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err)
+            endline = '\n' if i % verbose == 0 else '\r'
             print('Test: [{0}/{1}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Robust loss {rloss.val:.3f} ({rloss.avg:.3f})\t'
@@ -128,7 +129,7 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose, **kwargs):
                   'Error {error.val:.3f} ({error.avg:.3f})'.format(
                       i, len(loader), batch_time=batch_time, 
                       loss=losses, error=errors, rloss = robust_losses, 
-                      rerrors = robust_errors))
+                      rerrors = robust_errors), end=endline)
         log.flush()
 
         del X, y, robust_ce, out, ce

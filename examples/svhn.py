@@ -28,8 +28,10 @@ if __name__ == "__main__":
 
     # new svhn
     if args.model == 'deep': 
+        _, test_loader = pblm.svhn_loaders(64//(2**args.model_factor))
         model = pblm.svhn_model_deep(args.model_factor).cuda()
     elif args.model == 'wide': 
+        _, test_loader = pblm.svhn_loaders(64//args.model_factor)
         model = pblm.svhn_model_wide(args.model_factor).cuda()
     elif args.model == 'resnet':
         model = pblm.cifar_model_resnet(N=args.resnet_N, factor=args.resnet_factor).cuda()
