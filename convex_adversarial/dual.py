@@ -562,7 +562,7 @@ def select_layer(layer, dual_net, X, l1_proj, l1_type, in_f, out_f, dense_ti, zs
     elif 'Flatten' in (str(layer.__class__.__name__)): 
         return DualReshape(in_f, out_f)
     elif isinstance(layer, Dense): 
-        assert isinstance(dense_t[i], Dense)
+        assert isinstance(dense_ti, Dense)
         return DualDense(layer, dense_ti, dual_net, out_f)
     elif isinstance(layer, nn.BatchNorm2d):
         return DualBatchNorm2d(layer, zsi, out_f)
