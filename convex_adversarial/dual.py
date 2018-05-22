@@ -52,8 +52,9 @@ class ForwardPass:
 
 
 
-class InfBall():
+class InfBall(nn.Module):
     def __init__(self, X, epsilon): 
+        super(InfBall, self).__init__()
         self.epsilon = epsilon
 
         n = X[0].numel()
@@ -186,8 +187,9 @@ class InfBallProjBounded():
         else: 
             return InfBall.fval(self, nu=nu, nu_prev=nu_prev)
 
-class DualLinear(): 
+class DualLinear(nn.Module): 
     def __init__(self, layer, out_features): 
+        super(DualLinear, self).__init__()
         if not isinstance(layer, nn.Linear):
             raise ValueError("Expected nn.Linear input.")
         self.layer = layer
@@ -243,6 +245,7 @@ def conv_transpose2d(x, *args, **kwargs):
 
 class DualConv2d(DualLinear): 
     def __init__(self, layer, out_features): 
+        super(DualLinear, self).__init__()
         if not isinstance(layer, nn.Conv2d):
             raise ValueError("Expected nn.Conv2d input.")
         self.layer = layer
@@ -275,8 +278,9 @@ class DualConv2d(DualLinear):
             out = batch(out, n)
         return out
 
-class DualReshape(): 
+class DualReshape(nn.Module): 
     def __init__(self, in_f, out_f): 
+        super(DualReshape, self).__init__()
         self.in_f = in_f[1:]
         self.out_f = out_f[1:]
 
@@ -299,8 +303,9 @@ class DualReshape():
         else:
             return 0
 
-class DualReLU(): 
+class DualReLU(nn.Module): 
     def __init__(self, I, d, zl): 
+        super(DualReLU, self).__init__()
         n = d.data[0].numel()
         if I.data.sum() > 0: 
             self.I_empty = False
@@ -352,11 +357,12 @@ class DualReLU():
     def affine(self, *xs, I_ind=None): 
         x = xs[-1]
 
-        d = self.d 
+        d = self.d.cuda(device=x.get_device())
         if x.dim() > d.dim():
             d = d.unsqueeze(1)
 
         if I_ind is not None: 
+            I_ind = I_ind.cuda(device=x.get_device())
             return d[I_ind[:,0]]*x
         else:
             return d*x
@@ -418,9 +424,10 @@ class DualReLUProj(DualReLU):
         else: 
             return DualReLU.fval(self, nu=nu, nu_prev=nu_prev)
 
-class DualDense(): 
+class DualDense(nn.Module): 
     def __init__(self, dense, dense_t, net, out_features): 
-        self.duals = []
+        super(DualDense, self).__init__()
+        self.duals = nn.ModuleList([])
         for i,W in enumerate(dense.Ws): 
             if isinstance(W, nn.Conv2d):
                 dual_layer = DualConv2d(W, out_features)
@@ -438,19 +445,19 @@ class DualDense():
             if i < len(dense.Ws)-1 and W is not None: 
                 idx = i-len(dense.Ws)+1
                 # dual_ts needs to be len(dense.Ws)-i long
-                net[idx].dual_ts = [dual_layer] + [None]*(len(dense.Ws)-i-len(net[idx].dual_ts)-1) + net[idx].dual_ts
+                net[idx].dual_ts = nn.ModuleList([dual_layer] + [None]*(len(dense.Ws)-i-len(net[idx].dual_ts)-1) + list(net[idx].dual_ts))
 
-        self.dual_ts = [self.duals[-1]]
+        self.dual_ts = nn.ModuleList([self.duals[-1]])
 
 
     def affine(self, *xs): 
-        duals = self.duals[-min(len(xs),len(self.duals)):]
+        duals = list(self.duals)[-min(len(xs),len(self.duals)):]
         return sum(W.affine(*xs[:i+1]) 
             for i,W in zip(range(-len(duals) + len(xs), len(xs)),
                 duals) if W is not None)
 
     def affine_transpose(self, *xs): 
-        dual_ts = self.dual_ts[-min(len(xs),len(self.dual_ts)):]
+        dual_ts = list(self.dual_ts)[-min(len(xs),len(self.dual_ts)):]
         return sum(W.affine_transpose(*xs[:i+1]) 
             for i,W in zip(range(-len(dual_ts) + len(xs), len(xs)),
                 dual_ts) if W is not None)
@@ -660,13 +667,14 @@ def robust_loss(net, epsilon, X, y,
     return ce_loss, err
 
 class DualSequential(nn.Module): 
-    def __init__(self, dual_layers): 
+    def __init__(self, dual_layers, net): 
         super(DualSequential, self).__init__()
-        self.dual_layers = dual_layers
+        self.dual_layers = nn.ModuleList(dual_layers)
+        self.net = net
         pass
     def forward(self, x, I_ind=None): 
         zs = [x]
-        for l in self.dual_layers[1:]: 
+        for l in list(self.dual_layers)[1:]: 
             if isinstance(l, DualDense): 
                 zs.append(l.affine(*zs))
             elif isinstance(l, DualReLU): 
@@ -674,6 +682,35 @@ class DualSequential(nn.Module):
             else:
                 zs.append(l.affine(zs[-1]))
         return zs[-1]
+
+def dual_helper(dual_layer, D): 
+    if isinstance(dual_layer, (DualLinear, DualConv2d)): 
+        b = Variable(dual_layer.bias[0].data, volatile=True)
+        if isinstance(dual_layer, DualConv2d): 
+            b = b.unsqueeze(0)
+        Db = D(b)
+        return Db, Db
+    elif isinstance(dual_layer, DualReshape):
+        return 0,0
+    elif isinstance(dual_layer, DualReLU):
+        if dual_layer.I_empty: 
+            return 0,0
+        D = nn.DataParallel(D)
+        nu0 = D(Variable(dual_layer.nus[0].data,volatile=True), I_ind=dual_layer.I_ind)
+
+        nu = nu0.view(nu0.size(0), -1)
+        zlI = dual_layer.zl[dual_layer.I]
+        zl = (zlI * (-nu.t()).clamp(min=0)).mm(dual_layer.I_collapse).t().contiguous()
+        zu = -(zlI * nu.t().clamp(min=0)).mm(dual_layer.I_collapse).t().contiguous()
+        
+        return zl.view(-1, *(nu0.size()[1:])), zu.view(-1, *(nu0.size()[1:]))
+    elif isinstance(dual_layer, DualDense): 
+        fvals = [dual_helper(d, D) for d in dual_layer.duals if d is not None]
+        l,u = zip(*fvals)
+        return sum(l), sum(u)
+    else: 
+        print(dual_layer)
+        raise NotImplementedError
 
 def robust_loss_parallel(net, epsilon, X, y, l1_proj=None, l1_eps=None, m=None,
                  l1_type='exact', bounded_input=False, size_average=True): 
@@ -702,7 +739,7 @@ def robust_loss_parallel(net, epsilon, X, y, l1_proj=None, l1_eps=None, m=None,
     for i,(in_f,out_f,layer) in enumerate(zip(nf[:-1], nf[1:], net)): 
         if isinstance(layer, nn.ReLU): 
             # compute bounds
-            D = nn.DataParallel(DualSequential(dual_net))
+            D = nn.DataParallel(DualSequential(dual_net, net))
 
             # should be negative, but doesn't matter with abs()
             nu_1 = D(dual_net[0].nu_1[0]).abs().sum(1)
@@ -711,30 +748,35 @@ def robust_loss_parallel(net, epsilon, X, y, l1_proj=None, l1_eps=None, m=None,
             rest_l = 0
             rest_u = 0
             for i,dual_layer in enumerate(dual_net[1:]): 
-                D = DualSequential(dual_net[i+1:])
-                if isinstance(dual_layer, (DualLinear, DualConv2d)): 
-                    b = Variable(dual_layer.bias[0].data, volatile=True)
-                    if isinstance(dual_layer, DualConv2d): 
-                        b = b.unsqueeze(0)
-                    rest += D(b)
-                elif isinstance(dual_layer, DualReshape):
-                    continue
-                elif isinstance(dual_layer, DualReLU):
-                    D = nn.DataParallel(D)
-                    nu0 = D(Variable(dual_layer.nus[0].data,volatile=True), I_ind=dual_layer.I_ind)
+                D = DualSequential(dual_net[i+1:], net)
+                out = dual_helper(dual_layer, D)
+                rest_l += out[0]
+                rest_u += out[1]
+                # if isinstance(dual_layer, (DualLinear, DualConv2d)): 
+                #     b = Variable(dual_layer.bias[0].data, volatile=True)
+                #     if isinstance(dual_layer, DualConv2d): 
+                #         b = b.unsqueeze(0)
+                #     rest += D(b)
+                # elif isinstance(dual_layer, DualReshape):
+                #     continue
+                # elif isinstance(dual_layer, DualReLU):
+                #     D = nn.DataParallel(D)
+                #     nu0 = D(Variable(dual_layer.nus[0].data,volatile=True), I_ind=dual_layer.I_ind)
 
-                    nu = nu0.view(nu0.size(0), -1)
-                    zlI = dual_layer.zl[dual_layer.I]
-                    zl = (zlI * (-nu.t()).clamp(min=0)).mm(dual_layer.I_collapse).t().contiguous()
-                    zu = -(zlI * nu.t().clamp(min=0)).mm(dual_layer.I_collapse).t().contiguous()
+                #     nu = nu0.view(nu0.size(0), -1)
+                #     zlI = dual_layer.zl[dual_layer.I]
+                #     zl = (zlI * (-nu.t()).clamp(min=0)).mm(dual_layer.I_collapse).t().contiguous()
+                #     zu = -(zlI * nu.t().clamp(min=0)).mm(dual_layer.I_collapse).t().contiguous()
                     
-                    rest_l += zl.view(-1, *(nu0.size()[1:]))
-                    rest_u += zu.view(-1, *(nu0.size()[1:]))
-                else: 
-                    print(dual_layer)
-                    raise NotImplementedError
-            zl = nu_x + rest - epsilon*nu_1 + rest_l
-            zu = nu_x + rest + epsilon*nu_1 + rest_u
+                #     rest_l += zl.view(-1, *(nu0.size()[1:]))
+                #     rest_u += zu.view(-1, *(nu0.size()[1:]))
+                # elif isinstance(DualDense): 
+                #     pass
+                # else: 
+                #     print(dual_layer)
+                #     raise NotImplementedError
+            zl = nu_x - epsilon*nu_1 + rest_l
+            zu = nu_x + epsilon*nu_1 + rest_u
             # nu_x - epsilon*nu_1 is verified
             # print(nu_x - epsilon*nu_1)
 
