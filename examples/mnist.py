@@ -1,97 +1,93 @@
-import waitGPU
+# import waitGPU
 # import setGPU
-# waitGPU.wait(utilization=20, available_memory=10000, interval=60)
-waitGPU.wait(gpu_ids=[3])
+# waitGPU.wait(utilization=50, available_memory=10000, interval=60)
+# waitGPU.wait(gpu_ids=[1,3], utilization=20, available_memory=10000, interval=60)
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.autograd import Variable
+import torch.backends.cudnn as cudnn
+# cudnn.benchmark = True
 
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 
 import setproctitle
-import argparse
 
 import problems as pblm
 from trainer import *
-from convex_adversarial import epsilon_from_model
+import math
+import numpy as np
 
 if __name__ == "__main__": 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--batch_size', type=int, default=50)
-    parser.add_argument('--epochs', type=int, default=20)
-    parser.add_argument('--seed', type=int, default=0)
-    parser.add_argument('--verbose', type=int, default=1)
-    parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--epsilon", type=float, default=0.1)
-    parser.add_argument("--starting_epsilon", type=float, default=0.05)
-    parser.add_argument('--prefix')
-    parser.add_argument('--eval')
-    parser.add_argument('--baseline', action='store_true')
-    parser.add_argument('--alpha_grad', action='store_true')
-    parser.add_argument('--scatter_grad', action='store_true')
-    parser.add_argument('--l1_proj', type=int, default=None)
-    parser.add_argument('--delta', type=float, default=None)
-    parser.add_argument('--m', type=int, default=None)
-    parser.add_argument('--large', action='store_true')
-    parser.add_argument('--vgg', action='store_true')
-    args = parser.parse_args()
-
-    if args.prefix: 
-        if args.vgg: 
-            args.prefix += '_vgg'
-        elif args.large: 
-            args.prefix += '_large'
-
-        banned = ['alpha_grad', 'scatter_grad', 'verbose', 'prefix',
-                  'large', 'vgg']
-        for arg in sorted(vars(args)): 
-            if arg not in banned: 
-                args.prefix += '_' + arg + '_' +str(getattr(args, arg))
-    else: 
-        args.prefix = 'mnist_temporary'
+    args = pblm.argparser(opt='adam', verbose=200, starting_epsilon=0.01)
     print("saving file to {}".format(args.prefix))
-    # args.prefix = args.prefix or 'mnist_conv_{:.4f}_{:.4f}_0'.format(args.epsilon, args.lr).replace(".","_")
     setproctitle.setproctitle(args.prefix)
-
-    train_log = open(args.prefix + "_train.log", "w")
+    if not args.eval:
+        train_log = open(args.prefix + "_train.log", "w")
     test_log = open(args.prefix + "_test.log", "w")
 
     train_loader, test_loader = pblm.mnist_loaders(args.batch_size)
 
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
-    if args.vgg: 
+    if args.model == 'vgg': 
         model = pblm.mnist_model_vgg().cuda()
-    elif args.large: 
+        # s = 'experiments/mnist_vgg_proj/mnist200_vgg_batch_size_50_epochs_20_epsilon_0.001_l1_proj_200_l1_test_exact_l1_train_median_lr_0.001_opt_adam_seed_0_starting_epsilon_0.0001_model.pth'
+        # model.load_state_dict(torch.load(s))
+        # reduce the test set
+        _, test_loader = pblm.mnist_loaders(1)
+        # test_loader = [tl for i,tl in enumerate(test_loader) if i < 200]
+    elif args.model == 'large': 
         model = pblm.mnist_model_large().cuda()
+        # s = 'experiments/mnist_gradual/mnist2_large_batch_size_8_epochs_20_epsilon_0.1_l1_test_exact_l1_train_exact_lr_0.001_opt_adam_seed_0_starting_epsilon_0.1_model.pth'
+        # s = 'experiments/mnist_large_madry.pth'
+        # model.load_state_dict(torch.load(s))
+        _, test_loader = pblm.mnist_loaders(8)
+        # test_loader = [tl for i,tl in enumerate(test_loader) if i < 50]
+    elif args.model == 'resnet': 
+        model = pblm.mnist_model_resnet().cuda()
+    elif args.model == 'bn': 
+        model = pblm.mnist_model_bn().cuda()
+    elif args.model == 'wide': 
+        print("Using wide model with model_factor={}".format(args.model_factor))
+        _, test_loader = pblm.mnist_loaders(64//args.model_factor)
+        model = pblm.mnist_model_wide(args.model_factor).cuda()
+    elif args.model == 'deep': 
+        print("Using deep model with model_factor={}".format(args.model_factor))
+        _, test_loader = pblm.mnist_loaders(64//(2**args.model_factor))
+        model = pblm.mnist_model_deep(args.model_factor).cuda()
+    elif args.model =='deepwide': 
+        model = pblm.mnist_model_deep_wide().cuda()
+        _, test_loader = pblm.mnist_loaders(1)
+    elif args.model == 'deepbn': 
+        model = pblm.mnist_model_deep_bn().cuda()
+        _, test_loader = pblm.mnist_loaders(2)
+    elif args.model == 'threshold': 
+        model = pblm.mnist_model_threshold().cuda()
+    elif args.model == 'kernel8': 
+        model = pblm.mnist_model_kernel().cuda()
     else: 
         model = pblm.mnist_model().cuda() 
+        #model.load_state_dict(torch.load('l1_truth/mnist_nonexact_rerun_baseline_False_batch_size_50_delta_0.01_epochs_20_epsilon_0.1_l1_proj_200_l1_test_exact_l1_train_median_lr_0.001_m_10_seed_0_starting_epsilon_0.05_model.pth'))
 
-    if args.l1_proj is not None: 
-        for X,y in train_loader: 
-            break
-        l1_eps = epsilon_from_model(model, Variable(X.cuda()), args.l1_proj,
-                                    args.delta, args.m)
-        print('''
-With probability {} and projection into {} dimensions and a max
-over {} estimates, we have epsilon={}'''.format(args.delta, args.l1_proj,
-                                                args.m, l1_eps))
-        kwargs = {
-            'alpha_grad' : args.alpha_grad,
-            'scatter_grad' : args.scatter_grad, 
-            'l1_proj' : args.l1_proj, 
-            'l1_eps' : l1_eps, 
-            'm' : args.m
-        }
-    else:
-        kwargs = {
-            'alpha_grad' : args.alpha_grad,
-            'scatter_grad' : args.scatter_grad, 
-        }
+    for i, (X, y) in enumerate(test_loader): 
+        X = Variable(X.cuda())
+        y = Variable(y.cuda())
+        break
+
+    # for m in model.modules():
+    #     if isinstance(m, nn.Conv2d):
+    #         n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+    #         m.weight.data.normal_(0, math.sqrt(2. / n))
+    #         m.bias.data.zero_()
+
+    # pblm.init_scale(model, X[:1], args.starting_epsilon)
+
+    kwargs = pblm.args2kwargs(args, X=X)
+    best_err = 1
 
     if args.eval is not None: 
         try: 
@@ -102,20 +98,118 @@ over {} estimates, we have epsilon={}'''.format(args.delta, args.l1_proj,
             args.verbose, 
               **kwargs)
     else: 
-        opt = optim.Adam(model.parameters(), lr=args.lr)
-        for t in range(args.epochs):
-            if args.baseline: 
-                train_baseline(train_loader, model, opt, t, train_log, args.verbose)
-                evaluate_baseline(test_loader, model, t, test_log, args.verbose)
-            else:
-                if t <= args.epochs//2 and args.starting_epsilon is not None: 
-                    epsilon = args.starting_epsilon + (t/(args.epochs//2))*(args.epsilon - args.starting_epsilon)
-                else:
-                    epsilon = args.epsilon
-                train_robust(train_loader, model, opt, epsilon, t, train_log, 
-                    args.verbose, **kwargs)
-                evaluate_robust(test_loader, model, args.epsilon, t, test_log,
-                   args.verbose, **kwargs)
-                      # l1_geometric=args.l1_proj)
+        if args.opt == 'adam': 
+            opt = optim.Adam(model.parameters(), lr=args.lr)
+        elif args.opt == 'sgd': 
+            opt = optim.SGD(model.parameters(), lr=args.lr, 
+                            momentum=args.momentum,
+                            weight_decay=args.weight_decay)
+        else: 
+            raise ValueError("Unknown optimizer")
+        if args.cascade: 
+            sampler_indices = []
+            model = [model]
+            print('cascade training ')
+            for _ in range(0,args.cascade): 
+                if _ > 0: 
+                    print("Loading checkpoint model")
+                    d = torch.load(args.prefix+"_checkpoint.pth")
+                    for i in range(_): 
+                        model[i].load_state_dict(d['state_dict'][i])
+                    
+                    # also reduce dataset to just uncertified examples
+                    print("Finding uncertified examples")
+                    train_loader = sampler_robust_cascade(train_loader, model, args.epsilon, **kwargs)
+                    if train_loader is None: 
+                        print('No more examples, terminating')
+                        break
+                    sampler_indices.append(train_loader.sampler.indices)
 
-            torch.save(model.state_dict(), args.prefix + "_model.pth")
+                    print("Adding a new model")
+                    model.append(pblm.mnist_model().cuda())
+                
+                opt = optim.Adam(model[-1].parameters(), lr=args.lr)
+                # opt = optim.SGD(model[-1].parameters(), lr=args.lr, momentum=args.momentum,
+                #     weight_decay=args.weight_decay)
+                lr_scheduler = optim.lr_scheduler.StepLR(opt, step_size=10, gamma=0.5)
+                eps_schedule = np.logspace(np.log10(args.starting_epsilon), 
+                                           np.log10(args.epsilon), 
+                                           args.schedule_length)
+
+                for t in range(args.epochs):
+                    lr_scheduler.step(epoch=max(t-len(eps_schedule), 0))
+                    if t < len(eps_schedule) and args.starting_epsilon is not None: 
+                        # epsilon = args.starting_epsilon + (t/(args.epochs//2))*(args.epsilon - args.starting_epsilon)
+                        epsilon = float(eps_schedule[t])
+                    else:
+                        epsilon = args.epsilon
+                    train_robust(train_loader, model[-1], opt, epsilon, t, train_log, 
+                                    args.verbose, l1_type=args.l1_train, bounded_input=True,  **kwargs)
+                    # train_robust_cascade(train_loader, model, opt, epsilon, t, train_log, 
+                    #     args.verbose, l1_type=args.l1_train, **kwargs)
+                    err = evaluate_robust_cascade(test_loader, model, args.epsilon, t, test_log,
+                       args.verbose, l1_type=args.l1_test, bounded_input=True,  **kwargs)
+
+                    
+                    if err < best_err: 
+                        best_err = err
+                        torch.save({
+                            'state_dict' : [m.state_dict() for m in model], 
+                            'err' : best_err,
+                            'epoch' : t,
+                            'sampler_indices' : sampler_indices
+                            }, args.prefix + "_best.pth")
+                        
+                    torch.save({ 
+                        'state_dict': [m.state_dict() for m in model],
+                        'err' : err,
+                        'epoch' : t,
+                        'sampler_indices' : sampler_indices
+                        }, args.prefix + "_checkpoint.pth")
+        else:
+            lr_scheduler = optim.lr_scheduler.StepLR(opt, step_size=20, gamma=0.5)
+            # schedule epsilon over a maximum of 20 epochs
+            eps_schedule = np.logspace(np.log10(args.starting_epsilon), 
+                                       np.log10(args.epsilon), 
+                                       args.schedule_length)
+
+            for t in range(args.epochs):
+                # reduce LR after epsilon schedule
+                lr_scheduler.step(epoch=max(t-len(eps_schedule), 0))
+                if args.method == 'baseline': 
+                    train_baseline(train_loader, model, opt, t, train_log, args.verbose)
+                    err = evaluate_baseline(test_loader, model, t, test_log,
+                       args.verbose)
+                elif args.method=='madry':
+                    train_madry(train_loader, model, args.epsilon, opt, t, train_log,
+                       args.verbose)
+                    evaluate_madry(test_loader, model, args.epsilon, t, test_log,
+                       args.verbose)
+                else:
+                    if t < len(eps_schedule) and args.starting_epsilon is not None: 
+                        # epsilon = args.starting_epsilon + (t/(args.epochs//2))*(args.epsilon - args.starting_epsilon)
+                        epsilon = float(eps_schedule[t])
+                    else:
+                        epsilon = args.epsilon
+                    train_robust(train_loader, model, opt, epsilon, t, train_log, 
+                        args.verbose, l1_type=args.l1_train, bounded_input=True, 
+                        **kwargs)
+                    err = evaluate_robust(test_loader, model, args.epsilon, t,
+                       test_log,
+                       args.verbose, l1_type=args.l1_test, bounded_input=True, 
+                       **kwargs)
+                
+                if err < best_err: 
+                    best_err = err
+                    torch.save({
+                        'state_dict' : model.state_dict(), 
+                        'err' : best_err,
+                        'epoch' : t
+                        }, args.prefix + "_best.pth")
+                    
+                torch.save({ 
+                    'state_dict': model.state_dict(),
+                    'err' : err,
+                    'epoch' : t
+                    }, args.prefix + "_checkpoint.pth")
+                # torch.save(model.state_dict(), args.prefix + "_model.pth")

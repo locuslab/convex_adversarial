@@ -13,49 +13,48 @@ class Flatten(nn.Module):
 def mean(l): 
     return sum(l)/len(l)
 
+def _fgs(model, X, y, epsilon): 
+    opt = optim.Adam([X], lr=1e-3)
+    out = model(X)
+    ce = nn.CrossEntropyLoss()(out, y)
+    err = (out.data.max(1)[1] != y.data).float().sum()  / X.size(0)
+
+    opt.zero_grad()
+    ce.backward()
+    eta = X.grad.data.sign()*epsilon
+    
+    X_fgs = Variable(X.data + eta)
+    err_fgs = (model(X_fgs).data.max(1)[1] != y.data).float().sum()  / X.size(0)
+    return err, err_fgs
 
 def fgs(loader, model, epsilon, verbose=False, robust=False): 
-    def _fgs(model, X, y, epsilon): 
-        opt = optim.Adam([X], lr=1e-3)
-        out = model(X)
-        ce = nn.CrossEntropyLoss()(out, y)
-        err = (out.data.max(1)[1] != y.data).float().sum()  / X.size(0)
-
-        opt.zero_grad()
-        ce.backward()
-        eta = X.grad.data.sign()*epsilon
-        
-        X_fgs = Variable(X.data + eta)
-        err_fgs = (model(X_fgs).data.max(1)[1] != y.data).float().sum()  / X.size(0)
-        return err, err_fgs
-
     return attack(loader, model, epsilon, verbose=verbose, atk=_fgs,
                   robust=robust)
 
 
+def _pgd(model, X, y, epsilon, niters=100, alpha=0.01): 
+    out = model(X)
+    ce = nn.CrossEntropyLoss()(out, y)
+    err = (out.data.max(1)[1] != y.data).float().sum()  / X.size(0)
+
+    X_pgd = Variable(X.data, requires_grad=True)
+    for i in range(niters): 
+        opt = optim.Adam([X_pgd], lr=1e-3)
+        opt.zero_grad()
+        loss = nn.CrossEntropyLoss()(model(X_pgd), y)
+        loss.backward()
+        eta = alpha*X_pgd.grad.data.sign()
+        X_pgd = Variable(X_pgd.data + eta, requires_grad=True)
+        
+        # adjust to be within [-epsilon, epsilon]
+        eta = torch.clamp(X_pgd.data - X.data, -epsilon, epsilon)
+        X_pgd = Variable(X.data + eta, requires_grad=True)
+        
+    err_pgd = (model(X_pgd).data.max(1)[1] != y.data).float().sum() / X.size(0)
+    return err, err_pgd
+
 def pgd(loader, model, epsilon, niters=100, alpha=0.01, verbose=False,
         robust=False):
-    def _pgd(model, X, y, epsilon): 
-        out = model(X)
-        ce = nn.CrossEntropyLoss()(out, y)
-        err = (out.data.max(1)[1] != y.data).float().sum()  / X.size(0)
-
-        X_pgd = Variable(X.data, requires_grad=True)
-        for i in range(niters): 
-            opt = optim.Adam([X_pgd], lr=1e-3)
-            opt.zero_grad()
-            loss = nn.CrossEntropyLoss()(model(X_pgd), y)
-            loss.backward()
-            eta = alpha*X_pgd.grad.data.sign()
-            X_pgd = Variable(X_pgd.data + eta, requires_grad=True)
-            
-            # adjust to be within [-epsilon, epsilon]
-            eta = torch.clamp(X_pgd.data - X.data, -epsilon, epsilon)
-            X_pgd = Variable(X.data + eta, requires_grad=True)
-            
-        err_pgd = (model(X_pgd).data.max(1)[1] != y.data).float().sum() / X.size(0)
-        return err, err_pgd
-
     return attack(loader, model, epsilon, verbose=verbose, atk=_pgd,
                   robust=robust)
 
