@@ -312,7 +312,7 @@ class DualReLU(nn.Module):
             self.I_ind = Variable(I.data.view(-1,n).nonzero())
 
 
-            self.nus = [Variable(zl.data.new(I.data.sum(), n).zero_())]
+            self.nus = [Variable(zl.data.new(I.data.sum().item(), n).zero_())]
             self.nus[-1].scatter_(1, self.I_ind[:,1,None], d[I][:,None])
             self.nus[-1] = self.nus[-1].view(-1, *(d.size()[1:]))
             self.I_collapse = Variable(zl.data.new(self.I_ind.size(0),zl.size(0)).zero_())
@@ -592,17 +592,18 @@ class DualNetBounds:
         m : number of probabilistic bounds to take the max over
         """
         # need to change that if no batchnorm, can pass just a single example
-        if any('BatchNorm2d' in str(l.__class__.__name__) for l in net): 
-            zs = [Variable(X.data, volatile=True)]
-        else:
-            zs = [Variable(X.data[:1], volatile=True)]
-        nf = [zs[0].size()]
-        for l in net: 
-            if isinstance(l, Dense): 
-                zs.append(l(*zs))
+        with torch.no_grad(): 
+            if any('BatchNorm2d' in str(l.__class__.__name__) for l in net): 
+                zs = [Variable(X.data)]
             else:
-                zs.append(l(zs[-1]))
-            nf.append(zs[-1].size())
+                zs = [Variable(X.data[:1])]
+            nf = [zs[0].size()]
+            for l in net: 
+                if isinstance(l, Dense): 
+                    zs.append(l(*zs))
+                else:
+                    zs.append(l(zs[-1]))
+                nf.append(zs[-1].size())
 
 
         # Use the bounded boxes
@@ -662,7 +663,7 @@ def robust_loss(net, epsilon, X, y,
                         device_ids=None)(X,y)
     err = (f.data.max(1)[1] != y.data)
     if size_average: 
-        err = err.sum()/X.size(0)
+        err = err.sum().item()/X.size(0)
     ce_loss = nn.CrossEntropyLoss(reduce=size_average)(f, y)
     return ce_loss, err
 

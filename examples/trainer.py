@@ -32,9 +32,10 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
             y = y.squeeze(1)
         data_time.update(time.time() - end)
 
-        out = model(Variable(X, volatile=True))
-        ce = nn.CrossEntropyLoss()(out, Variable(y))
-        err = (out.data.max(1)[1] != y).float().sum()  / X.size(0)
+        with torch.no_grad(): 
+            out = model(Variable(X))
+            ce = nn.CrossEntropyLoss()(out, Variable(y))
+            err = (out.data.max(1)[1] != y).float().sum()  / X.size(0)
 
 
         robust_ce, robust_err = robust_loss(model, epsilon, 
@@ -50,16 +51,17 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
         opt.step()
 
         # measure accuracy and record loss
-        losses.update(ce.data[0], X.size(0))
-        errors.update(err, X.size(0))
-        robust_losses.update(robust_ce.data[0], X.size(0))
+        losses.update(ce.item(), X.size(0))
+        errors.update(err.item(), X.size(0))
+        robust_losses.update(robust_ce.detach().item(), X.size(0))
         robust_errors.update(robust_err, X.size(0))
 
         # measure elapsed time
         batch_time.update(time.time()-end)
         end = time.time()
 
-        print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err, file=log)
+        print(epoch, i, robust_ce.detach().item(), 
+                robust_err, ce.item(), err.item(), file=log)
 
         if verbose: 
             endline = '\n' if i % verbose == 0 else '\r'
@@ -92,13 +94,15 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose, **kwargs):
     model.eval()
 
     end = time.time()
+
+    torch.set_grad_enabled(False)
     for i, (X,y) in enumerate(loader):
         X,y = X.cuda(), y.cuda().long()
         if y.dim() == 2: 
             y = y.squeeze(1)
         robust_ce, robust_err = robust_loss(model, epsilon, 
-                                            Variable(X, volatile=True), 
-                                            Variable(y, volatile=True),
+                                            Variable(X), 
+                                            Variable(y),
                                              **kwargs)
         out = model(Variable(X))
         ce = nn.CrossEntropyLoss()(out, Variable(y))
@@ -107,16 +111,16 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose, **kwargs):
         # _,pgd_err = _pgd(model, Variable(X), Variable(y), epsilon)
 
         # measure accuracy and record loss
-        losses.update(ce.data[0], X.size(0))
+        losses.update(ce.item(), X.size(0))
         errors.update(err, X.size(0))
-        robust_losses.update(robust_ce.data[0], X.size(0))
+        robust_losses.update(robust_ce.item(), X.size(0))
         robust_errors.update(robust_err, X.size(0))
 
         # measure elapsed time
         batch_time.update(time.time()-end)
         end = time.time()
 
-        print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err,
+        print(epoch, i, robust_ce.item(), robust_err, ce.item(), err,
            file=log)
         if verbose: 
             # print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err)
@@ -133,6 +137,7 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose, **kwargs):
         log.flush()
 
         del X, y, robust_ce, out, ce
+    torch.set_grad_enabled(True)
     torch.cuda.empty_cache()
     print('')
     print(' * Robust error {rerror.avg:.3f}\t'
