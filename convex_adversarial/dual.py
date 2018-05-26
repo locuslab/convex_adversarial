@@ -8,8 +8,7 @@ import numpy as np
 # import cvxpy as cp
 
 from . import affine as Aff
-from . import l1 as L1_engine
-from .dense import Dense
+from .utils import Dense
 
 import warnings
 

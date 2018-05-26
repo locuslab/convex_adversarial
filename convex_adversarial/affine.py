@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 import torch.nn.functional as F
-from .dense import Dense
+from .utils import Dense
 
 # Conversion functions to turn layers into affine layers
 def toAffineTranspose(l): 
