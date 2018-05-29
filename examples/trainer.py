@@ -120,7 +120,7 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose, **kwargs):
         batch_time.update(time.time()-end)
         end = time.time()
 
-        print(epoch, i, robust_ce.item(), robust_err, ce.item(), err,
+        print(epoch, i, robust_ce.item(), robust_err, ce.item(), err.item(),
            file=log)
         if verbose: 
             # print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err)
