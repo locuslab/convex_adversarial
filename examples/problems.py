@@ -291,17 +291,6 @@ def svhn_loaders(batch_size):
     test_loader = torch.utils.data.DataLoader(test, batch_size=batch_size, shuffle=False, pin_memory=True)
     return train_loader, test_loader
 
-def svhn_second_stage_loaders(batch_size): 
-    train = datasets.SVHN(".", split='train', download=True, transform=transforms.ToTensor(), target_transform=replace_10_with_0)
-    test = datasets.SVHN(".", split='test', download=True, transform=transforms.ToTensor(), target_transform=replace_10_with_0)
-    
-    total = torch.load('cascade_stage_2_svhn_indices.pth')
-    sampler = torch.utils.data.sampler.SubsetRandomSampler(total)
-    train_loader = torch.utils.data.DataLoader(train, batch_size=batch_size, shuffle=False, pin_memory=True, sampler=sampler)
-    test_loader = torch.utils.data.DataLoader(test, batch_size=batch_size, shuffle=False, pin_memory=True, sampler=sampler)
-    return train_loader, test_loader
-
-
 def svhn_model(): 
     model = nn.Sequential(
         nn.Conv2d(3, 16, 4, stride=2, padding=1),
@@ -547,42 +536,43 @@ def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3,
               opt='sgd', momentum=0.9, weight_decay=5e-4): 
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--batch_size', type=int, default=batch_size)
-    parser.add_argument('--epochs', type=int, default=epochs)
-    parser.add_argument('--seed', type=int, default=seed)
-    parser.add_argument('--verbose', type=int, default=verbose)
-    parser.add_argument("--lr", type=float, default=lr)
-    parser.add_argument("--epsilon", type=float, default=epsilon)
-    parser.add_argument("--starting_epsilon", type=float, default=starting_epsilon)
-    parser.add_argument('--prefix')
-    parser.add_argument('--eval')
-    parser.add_argument('--resume', action='store_true')
-    parser.add_argument('--alpha_grad', default=True)
-    parser.add_argument('--scatter_grad', default=True)
-    parser.add_argument('--l1_proj', type=int, default=l1_proj)
-    parser.add_argument('--delta', type=float, default=delta)
-    parser.add_argument('--m', type=int, default=m)
-    parser.add_argument('--l1_eps', type=float, default=l1_eps)
-    # parser.add_argument('--large', action='store_true')
-    # parser.add_argument('--vgg', action='store_true')
-    # parser.add_argument('--resnet', action='store_true')
-    parser.add_argument('--l1_train', default=l1_train)
-    parser.add_argument('--l1_test', default=l1_test)
+
+    # optimizer settings
     parser.add_argument('--opt', default=opt)
     parser.add_argument('--momentum', type=float, default=momentum)
     parser.add_argument('--weight_decay', type=float, default=weight_decay)
-    parser.add_argument('--model', default=None)
-    parser.add_argument('--model_factor', type=int, default=8)
-    parser.add_argument('--method', default=None)
-    parser.add_argument('--cuda_ids', default=None)
+    parser.add_argument('--batch_size', type=int, default=batch_size)
+    parser.add_argument('--epochs', type=int, default=epochs)
+    parser.add_argument("--lr", type=float, default=lr)
+
+    # epsilon settings
+    parser.add_argument("--epsilon", type=float, default=epsilon)
+    parser.add_argument("--starting_epsilon", type=float, default=starting_epsilon)
     parser.add_argument('--schedule_length', type=int, default=10)
 
+    # projection settings
+    parser.add_argument('--l1_proj', type=int, default=l1_proj)
+    parser.add_argument('--delta', type=float, default=delta)
+    parser.add_argument('--m', type=int, default=m)
+    parser.add_argument('--l1_train', default=l1_train)
+    parser.add_argument('--l1_test', default=l1_test)
+    parser.add_argument('--l1_eps', type=float, default=l1_eps)
+
+    # model arguments
+    parser.add_argument('--model', default=None)
+    parser.add_argument('--model_factor', type=int, default=8)
+    parser.add_argument('--cascade', type=int, default=1)
+    parser.add_argument('--method', default=None)
     parser.add_argument('--resnet_N', type=int, default=1)
     parser.add_argument('--resnet_factor', type=int, default=1)
 
-    parser.add_argument('--cascade', type=int, default=None)
+    # other arguments
+    parser.add_argument('--prefix')
     parser.add_argument('--load')
-
+    parser.add_argument('--real_time', action='store_true')
+    parser.add_argument('--seed', type=int, default=seed)
+    parser.add_argument('--verbose', type=int, default=verbose)
+    parser.add_argument('--cuda_ids', default=None)
 
     
     args = parser.parse_args()
@@ -604,7 +594,7 @@ def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3,
         if args.eval: 
             args.prefix += '_eval_' + args.eval.replace('/','_')
         else:
-            banned = ['alpha_grad', 'scatter_grad', 'verbose', 'prefix',
+            banned = ['verbose', 'prefix',
                       'resume', 'baseline', 'eval', 
                       'method', 'model', 'cuda_ids', 'load']
             if args.method == 'baseline':
@@ -617,6 +607,8 @@ def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3,
 
             if args.m == 1: 
                 banned += ['m']
+            if args.cascade == 1: 
+                banned += ['cascade']
 
             # if not using a model that uses model_factor, 
             # ignore model_factor
@@ -659,15 +651,11 @@ def args2kwargs(args, X=None):
         else:
             print('Specified l1_epsilon={}'.format(args.l1_eps))
         kwargs = {
-            'alpha_grad' : args.alpha_grad,
-            'scatter_grad' : args.scatter_grad, 
             'l1_proj' : args.l1_proj, 
             'l1_eps' : args.l1_eps, 
             'm' : args.m
         }
     else:
         kwargs = {
-            'alpha_grad' : args.alpha_grad,
-            'scatter_grad' : args.scatter_grad, 
         }
     return kwargs
