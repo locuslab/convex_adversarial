@@ -1,11 +1,14 @@
 # Provably robust neural networks
 
-*A repository for training provably robust neural networks by optimizing
-convex outer bounds on the adversarial polytope. Created by [Eric Wong](https://riceric22.github.io) and [Zico Kolter](http://zicokolter.com). [Link to arXiv paper][paper].*
+*A repository for training provably robust neural networks by optimizing convex outer bounds on the adversarial polytope. Created by [Eric Wong](https://riceric22.github.io) and [Zico Kolter](http://zicokolter.com). [Link to the original arXiv paper][paper]. The method has been further extended to be fully modular, scalable, and use cascades to improve robust error. Check out our new paper on arXiv: [Scaling provable adversarial defenses][scalable_paper].*
 
 [paper]: https://arxiv.org/abs/1711.00851
+[scalable_paper]: https://arxiv.org/abs/1805.12514
 
 ## News
++ 5/31/2018 - New paper on a scalable version for models with skip connections
+and a fully modular implementation for simple extension. Code base with these
+improvements with a port to PyTorch 0.4 will be released shortly. 
 + 4/26/2018 - Added robust models from the paper to the `models/` folder in the
 repository. 
 + 3/4/2018 - Updated paper with more experiments. Code migrated to work with
@@ -65,7 +68,12 @@ the adversarial polytope to lower bound the output. This lower bound can be
 expressed as another deep network with the same model parameters, and
 optimizing this lower bound allows us to guarantee robustness of the network.
 
-The long version: see our paper, [Provable defenses against adversarial examples via the convex outer adversarial polytope][paper]. 
+The long version: see our original paper, 
+[Provable defenses against adversarial examples via the convex outer adversarial polytope][paper]. 
+
+For our updated version which is scalable, modular, and achieves even better 
+robust performance, see our new paper, 
+[Scaling provable adversarial defenses][scalable_paper]. 
 
 ## What difference does this make? 
 We illustrate the power of training robust networks in the following two scenarios: 2D toy case for a visualization, and on the MNIST dataset. More experiments are in the paper. 
