@@ -21,6 +21,23 @@ from trainer import *
 import math
 import numpy as np
 
+def select_model(m): 
+    if m == 'large': 
+        model = pblm.mnist_model_large().cuda()
+        _, test_loader = pblm.mnist_loaders(8)
+    elif m == 'wide': 
+        print("Using wide model with model_factor={}".format(args.model_factor))
+        _, test_loader = pblm.mnist_loaders(64//args.model_factor)
+        model = pblm.mnist_model_wide(args.model_factor).cuda()
+    elif m == 'deep': 
+        print("Using deep model with model_factor={}".format(args.model_factor))
+        _, test_loader = pblm.mnist_loaders(64//(2**args.model_factor))
+        model = pblm.mnist_model_deep(args.model_factor).cuda()
+    else: 
+        model = pblm.mnist_model().cuda() 
+    return model
+
+
 if __name__ == "__main__": 
     args = pblm.argparser(opt='adam', verbose=200, starting_epsilon=0.01)
     print("saving file to {}".format(args.prefix))
@@ -32,36 +49,6 @@ if __name__ == "__main__":
 
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
-    if args.model == 'vgg': 
-        model = pblm.mnist_model_vgg().cuda()
-        _, test_loader = pblm.mnist_loaders(1)
-    elif args.model == 'large': 
-        model = pblm.mnist_model_large().cuda()
-        _, test_loader = pblm.mnist_loaders(8)
-    elif args.model == 'resnet': 
-        model = pblm.mnist_model_resnet().cuda()
-    elif args.model == 'bn': 
-        model = pblm.mnist_model_bn().cuda()
-    elif args.model == 'wide': 
-        print("Using wide model with model_factor={}".format(args.model_factor))
-        _, test_loader = pblm.mnist_loaders(64//args.model_factor)
-        model = pblm.mnist_model_wide(args.model_factor).cuda()
-    elif args.model == 'deep': 
-        print("Using deep model with model_factor={}".format(args.model_factor))
-        _, test_loader = pblm.mnist_loaders(64//(2**args.model_factor))
-        model = pblm.mnist_model_deep(args.model_factor).cuda()
-    elif args.model =='deepwide': 
-        model = pblm.mnist_model_deep_wide().cuda()
-        _, test_loader = pblm.mnist_loaders(1)
-    elif args.model == 'deepbn': 
-        model = pblm.mnist_model_deep_bn().cuda()
-        _, test_loader = pblm.mnist_loaders(2)
-    elif args.model == 'threshold': 
-        model = pblm.mnist_model_threshold().cuda()
-    elif args.model == 'kernel8': 
-        model = pblm.mnist_model_kernel().cuda()
-    else: 
-        model = pblm.mnist_model().cuda() 
 
     for X,y in train_loader: 
         break
@@ -69,7 +56,8 @@ if __name__ == "__main__":
     best_err = 1
 
     sampler_indices = []
-    model = [model]
+    model = [select_model(args.model)]
+
     for _ in range(0,args.cascade): 
         if _ > 0: 
             # reduce dataset to just uncertified examples
@@ -81,7 +69,7 @@ if __name__ == "__main__":
             sampler_indices.append(train_loader.sampler.indices)
 
             print("Adding a new model")
-            model.append(pblm.mnist_model().cuda())
+            model.append(select_model(args.model))
         
         if args.opt == 'adam': 
             opt = optim.Adam(model[-1].parameters(), lr=args.lr)

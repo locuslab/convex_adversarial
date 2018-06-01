@@ -35,22 +35,6 @@ def select_L(X, k, m, l1_eps, W, l1_type='exact', threshold=None,
         else:
             raise ValueError("Unknown l1_type: {}".format(l1_type))
 
-class ForwardPass: 
-    def __init__(self, X=None): 
-        if X is not None: 
-            self.inputs = [X]
-        else:
-            self.inputs = []
-    def apply(self, W): 
-        return W(*self.inputs)
-    def add(self, X): 
-        self.inputs.append(X)
-    def add_and_apply(self, X, W): 
-        self.add(X)
-        return self.apply(W)
-
-
-
 class InfBall(nn.Module):
     def __init__(self, X, epsilon): 
         super(InfBall, self).__init__()
@@ -58,7 +42,7 @@ class InfBall(nn.Module):
 
         n = X[0].numel()
         self.nu_x = [X] 
-        self.nu_1 = [X.data.new(n,n)]
+        self.nu_1 = [X.new(n,n)]
         torch.eye(n, out=self.nu_1[0])
         self.nu_1[0] = Variable(self.nu_1[0].view(-1,*X.size()[1:]).unsqueeze(0))
 
@@ -70,10 +54,6 @@ class InfBall(nn.Module):
         epsilon = self.epsilon
         if nu is None: 
             l1 = self.nu_1[-1].abs().sum(1)
-            # nu_x_pos = (self.nu_x[0]-self.epsilon).view(self.nu_x[0].size(0),-1).matmul(self.nu_1[-1].view(784,-1).clamp(min=0))
-            # print(nu_x_pos.view(-1))
-            # nu_x_pos = (self.nu_x[0]+self.epsilon).view(self.nu_x[0].size(0),-1).matmul(self.nu_1[-1].view(784,-1).clamp(max=0))
-            # # print(nu_x_pos.view(-1))
             if isinstance(self.epsilon, Variable): 
                 while epsilon.dim() < self.nu_x[-1].dim(): 
                     epsilon = epsilon.unsqueeze(1)
@@ -86,19 +66,19 @@ class InfBall(nn.Module):
             if isinstance(self.epsilon, Variable): 
                 while epsilon.dim() < nu.dim()-1: 
                     epsilon = epsilon.unsqueeze(1)
-                # l1 = self.epsilon
             l1 = epsilon*nu.abs().sum(2)
             return -nu_x - l1
 
-class InfBallBounded():
+class InfBallBounded(nn.Module):
     def __init__(self, X, epsilon, l=0, u=1): 
+        super(InfBallBounded, self).__init__()
         self.epsilon = epsilon
         self.l = (X-epsilon).clamp(min=l).view(X.size(0), 1, -1)
         self.u = (X+epsilon).clamp(max=u).view(X.size(0), 1, -1)
 
         n = X[0].numel()
         self.nu_x = [X] 
-        self.nu_1 = [X.data.new(n,n)]
+        self.nu_1 = [X.new(n,n)]
         torch.eye(n, out=self.nu_1[0])
         self.nu_1[0] = Variable(self.nu_1[0].view(-1,*X.size()[1:]).unsqueeze(0))
 
@@ -122,19 +102,18 @@ class InfBallBounded():
             u, l = self.u.unsqueeze(3).squeeze(1), self.l.unsqueeze(3).squeeze(1)
             return (-nu_neg.matmul(l) - nu_pos.matmul(u)).squeeze(2)
 
-class InfBallProj():
+class InfBallProj(nn.Module):
     def __init__(self, X, epsilon, k): 
+        super(InfBallProj, self).__init__()
         self.epsilon = epsilon
 
         n = X[0].numel()
         self.nu_x = [X] 
-        self.nu = [Variable(X.data.new(1,k,*X.size()[1:]).cauchy_())]
-        # slef.nu_one = [Variable(X.data.new(1,*X.size()[1:]).fill_(1))]
+        self.nu = [Variable(X.new(1,k,*X.size()[1:]).cauchy_())]
 
     def apply(self, dual_layer): 
         self.nu_x.append(dual_layer.affine(*self.nu_x))
         self.nu.append(dual_layer.affine(*self.nu))
-        # self.nu_one.append(dual_layer.affine(*self.nu_one))
 
     def fval(self, nu=None, nu_prev=None): 
         if nu is None: 
@@ -160,9 +139,9 @@ class InfBallProjBounded():
         self.u = self.nu_one_u[-1].view(X.size(0), 1, -1)
 
         n = X[0].numel()
-        R = X.data.new(1,k,*X.size()[1:]).cauchy_()
-        self.nu_l = [Variable(R * self.nu_one_l[-1].data.unsqueeze(1))]
-        self.nu_u = [Variable(R * self.nu_one_u[-1].data.unsqueeze(1))]
+        R = X.new(1,k,*X.size()[1:]).cauchy_()
+        self.nu_l = [Variable(R * self.nu_one_l[-1].unsqueeze(1))]
+        self.nu_u = [Variable(R * self.nu_one_u[-1].unsqueeze(1))]
 
     def apply(self, dual_layer): 
         self.nu_l.append(dual_layer.affine(*self.nu_l))
@@ -305,16 +284,16 @@ class DualReshape(nn.Module):
 class DualReLU(nn.Module): 
     def __init__(self, I, d, zl): 
         super(DualReLU, self).__init__()
-        n = d.data[0].numel()
-        if I.data.sum() > 0: 
+        n = d[0].numel()
+        if I.sum().item() > 0: 
             self.I_empty = False
-            self.I_ind = Variable(I.data.view(-1,n).nonzero())
+            self.I_ind = I.view(-1,n).nonzero()
 
 
-            self.nus = [Variable(zl.data.new(I.data.sum().item(), n).zero_())]
+            self.nus = [Variable(zl.new(I.sum().item(), n).zero_())]
             self.nus[-1].scatter_(1, self.I_ind[:,1,None], d[I][:,None])
             self.nus[-1] = self.nus[-1].view(-1, *(d.size()[1:]))
-            self.I_collapse = Variable(zl.data.new(self.I_ind.size(0),zl.size(0)).zero_())
+            self.I_collapse = Variable(zl.new(self.I_ind.size(0),zl.size(0)).zero_())
             self.I_collapse.scatter_(1, self.I_ind[:,0][:,None], 1)
         else: 
             self.I_empty = True
@@ -364,6 +343,7 @@ class DualReLU(nn.Module):
             I_ind = I_ind.cuda(device=x.get_device())
             return d[I_ind[:,0]]*x
         else:
+            # print('affine for relu', d.size(), x.size())
             return d*x
 
     def affine_transpose(self, *xs): 
@@ -378,18 +358,18 @@ class DualReLUProj(DualReLU):
         self.I = I
         self.zl = zl
 
-        if I.data.sum() == 0: 
+        if I.sum().item() == 0: 
             warnings.warn('ReLU projection has no origin crossing activations')
             self.I_empty = True
             return
         else:
             self.I_empty = False
 
-        nu = Variable(zl.data.new(n, k, *(d.size()[1:])).zero_())
-        nu_one = Variable(zl.data.new(n, *(d.size()[1:])).zero_())
-        if  (I.data).sum() > 0: 
-            nu.data[I.data.unsqueeze(1).expand_as(nu)] = nu.data.new(I.data.sum()*k).cauchy_()
-            nu_one.data[I.data] = 1
+        nu = Variable(zl.new(n, k, *(d.size()[1:])).zero_())
+        nu_one = Variable(zl.new(n, *(d.size()[1:])).zero_())
+        if  I.sum() > 0: 
+            nu[I.unsqueeze(1).expand_as(nu)] = nu.new(I.sum().item()*k).cauchy_()
+            nu_one[I] = 1
         nu = zl.unsqueeze(1)*nu
         nu_one = zl*nu_one
 
@@ -557,10 +537,10 @@ def select_layer(layer, dual_net, X, l1_proj, l1_type, in_f, out_f, dense_ti, zs
 
         d = (zl >= 0).detach().type_as(X)
         I = ((zu > 0).detach() * (zl < 0).detach())
-        if I.data.sum() > 0:
+        if I.sum().item() > 0:
             d[I] += zu[I]/(zu[I] - zl[I])
 
-        if l1_proj is not None and l1_type=='median' and I.data.sum() > l1_proj:
+        if l1_proj is not None and l1_type=='median' and I.sum().item() > l1_proj:
             return DualReLUProj(I, d, zl, l1_proj)
         else:
             return DualReLU(I, d, zl)
@@ -593,9 +573,9 @@ class DualNetBounds:
         # need to change that if no batchnorm, can pass just a single example
         with torch.no_grad(): 
             if any('BatchNorm2d' in str(l.__class__.__name__) for l in net): 
-                zs = [Variable(X.data)]
+                zs = [X]
             else:
-                zs = [Variable(X.data[:1])]
+                zs = [X[:1]]
             nf = [zs[0].size()]
             for l in net: 
                 if isinstance(l, Dense): 
@@ -636,7 +616,9 @@ class DualNetBounds:
         
         nu.append(None)
         nu = list(reversed(nu))
-
+        l0 = [l.fval(nu=n, nu_prev=nprev) 
+            for l,nprev,n in zip(dual_net, nu[:-1],nu[1:])]
+        print(l0[0])
         return sum(l.fval(nu=n, nu_prev=nprev) 
             for l,nprev,n in zip(dual_net, nu[:-1],nu[1:]))
 
@@ -650,7 +632,7 @@ class RobustBounds(nn.Module):
     def forward(self, X,y): 
         num_classes = self.net[-1].out_features
         dual = DualNetBounds(self.net, X, self.epsilon, **self.kwargs)
-        c = Variable(torch.eye(num_classes).type_as(X.data)[y.data].unsqueeze(1) - torch.eye(num_classes).type_as(X.data).unsqueeze(0))
+        c = Variable(torch.eye(num_classes).type_as(X)[y].unsqueeze(1) - torch.eye(num_classes).type_as(X).unsqueeze(0))
         if X.is_cuda:
             c = c.cuda()
         f = -dual.g(c)
@@ -658,13 +640,14 @@ class RobustBounds(nn.Module):
 
 def robust_loss(net, epsilon, X, y, 
                 size_average=True, device_ids=None, **kwargs):
-    f = nn.DataParallel(RobustBounds(net, epsilon, **kwargs),
-                        device_ids=None)(X,y)
-    err = (f.data.max(1)[1] != y.data)
+    f = nn.DataParallel(RobustBounds(net, epsilon, **kwargs))(X,y)
+    err = (f.max(1)[1] != y)
     if size_average: 
         err = err.sum().item()/X.size(0)
     ce_loss = nn.CrossEntropyLoss(reduce=size_average)(f, y)
     return ce_loss, err
+
+# Data parallel versions of the loss calculation
 
 class DualSequential(nn.Module): 
     def __init__(self, dual_layers, net): 
@@ -685,7 +668,7 @@ class DualSequential(nn.Module):
 
 def dual_helper(dual_layer, D): 
     if isinstance(dual_layer, (DualLinear, DualConv2d)): 
-        b = Variable(dual_layer.bias[0].data, volatile=True)
+        b = dual_layer.bias[0]
         if isinstance(dual_layer, DualConv2d): 
             b = b.unsqueeze(0)
         Db = D(b)
@@ -696,7 +679,7 @@ def dual_helper(dual_layer, D):
         if dual_layer.I_empty: 
             return 0,0
         D = nn.DataParallel(D)
-        nu0 = D(Variable(dual_layer.nus[0].data,volatile=True), I_ind=dual_layer.I_ind)
+        nu0 = D(dual_layer.nus[0], I_ind=dual_layer.I_ind)
 
         nu = nu0.view(nu0.size(0), -1)
         zlI = dual_layer.zl[dual_layer.I]
@@ -716,8 +699,13 @@ def robust_loss_parallel(net, epsilon, X, y, l1_proj=None, l1_eps=None, m=None,
                  l1_type='exact', bounded_input=False, size_average=True): 
     if any('BatchNorm2d' in str(l.__class__.__name__) for l in net): 
         raise NotImplementedError
-
-    zs = [Variable(X.data[:1], volatile=True)]
+    if bounded_input: 
+        raise NotImplementedError('parallel loss for bounded input spaces not implemented')
+    if X.size(0) != 1: 
+        raise ValueError('Only use this function for a single example. This is '
+            'intended for the use case when a single example does not fit in '
+            'memory.')
+    zs = [X[:1]]
     nf = [zs[0].size()]
     for l in net: 
         if isinstance(l, Dense): 
@@ -733,17 +721,20 @@ def robust_loss_parallel(net, epsilon, X, y, l1_proj=None, l1_eps=None, m=None,
     else: 
         dense_t = [None]*len(net)
 
-    eye = Variable(dual_net[0].nu_1[0].data, volatile=True)
-    x = Variable(dual_net[0].nu_x[0].data, volatile=True)
+    eye = dual_net[0].nu_1[0]
+    x = dual_net[0].nu_x[0]
 
     for i,(in_f,out_f,layer) in enumerate(zip(nf[:-1], nf[1:], net)): 
         if isinstance(layer, nn.ReLU): 
             # compute bounds
-            D = nn.DataParallel(DualSequential(dual_net, net))
+            D =nn.DataParallel(DualSequential(dual_net, net))
 
             # should be negative, but doesn't matter with abs()
             nu_1 = D(dual_net[0].nu_1[0]).abs().sum(1)
             nu_x = D(dual_net[0].nu_x[0])
+            # print(nu_x.size(), D(dual_net[0].nu_x[0]).size(), dual_net[0].nu_x[0].size())
+            # print(DualSequential(dual_net, net)(dual_net[0].nu_x[0]).size())
+            # print(nn.DataParallel(DualSequential(dual_net, net))(dual_net[0].nu_x[0]).size())
             rest = 0
             rest_l = 0
             rest_u = 0
@@ -752,37 +743,15 @@ def robust_loss_parallel(net, epsilon, X, y, l1_proj=None, l1_eps=None, m=None,
                 out = dual_helper(dual_layer, D)
                 rest_l += out[0]
                 rest_u += out[1]
-                # if isinstance(dual_layer, (DualLinear, DualConv2d)): 
-                #     b = Variable(dual_layer.bias[0].data, volatile=True)
-                #     if isinstance(dual_layer, DualConv2d): 
-                #         b = b.unsqueeze(0)
-                #     rest += D(b)
-                # elif isinstance(dual_layer, DualReshape):
-                #     continue
-                # elif isinstance(dual_layer, DualReLU):
-                #     D = nn.DataParallel(D)
-                #     nu0 = D(Variable(dual_layer.nus[0].data,volatile=True), I_ind=dual_layer.I_ind)
-
-                #     nu = nu0.view(nu0.size(0), -1)
-                #     zlI = dual_layer.zl[dual_layer.I]
-                #     zl = (zlI * (-nu.t()).clamp(min=0)).mm(dual_layer.I_collapse).t().contiguous()
-                #     zu = -(zlI * nu.t().clamp(min=0)).mm(dual_layer.I_collapse).t().contiguous()
-                    
-                #     rest_l += zl.view(-1, *(nu0.size()[1:]))
-                #     rest_u += zu.view(-1, *(nu0.size()[1:]))
-                # elif isinstance(DualDense): 
-                #     pass
-                # else: 
-                #     print(dual_layer)
-                #     raise NotImplementedError
+            # print(dual_net[0].nu_x[0].size(), D(dual_net[0].nu_x[0]).size())
+            # print(nu_x.size(), nu_1.size(),
+               # rest_l.size())
             zl = nu_x - epsilon*nu_1 + rest_l
             zu = nu_x + epsilon*nu_1 + rest_u
-            # nu_x - epsilon*nu_1 is verified
-            # print(nu_x - epsilon*nu_1)
 
             d = (zl >= 0).detach().type_as(X)
             I = ((zu > 0).detach() * (zl < 0).detach())
-            if I.data.sum() > 0:
+            if I.sum().item() > 0:
                 d[I] += zu[I]/(zu[I] - zl[I])
 
             dual_layer = DualReLU(I, d, zl)
@@ -793,7 +762,7 @@ def robust_loss_parallel(net, epsilon, X, y, l1_proj=None, l1_eps=None, m=None,
 
 
     num_classes = net[-1].out_features
-    c = Variable(torch.eye(num_classes).type_as(X.data)[y.data].unsqueeze(1) - torch.eye(num_classes).type_as(X.data).unsqueeze(0))
+    c = Variable(torch.eye(num_classes).type_as(X)[y].unsqueeze(1) - torch.eye(num_classes).type_as(X).unsqueeze(0))
     if X.is_cuda:
         c = c.cuda()
 
@@ -804,12 +773,15 @@ def robust_loss_parallel(net, epsilon, X, y, l1_proj=None, l1_eps=None, m=None,
     
     nu.append(None)
     nu = list(reversed(nu))
-
+    l0 = [l.fval(nu=n, nu_prev=nprev) 
+        for l,nprev,n in zip(dual_net, nu[:-1],nu[1:])]
+    print(l0[0])
     f = -sum(l.fval(nu=n, nu_prev=nprev) 
         for l,nprev,n in zip(dual_net, nu[:-1],nu[1:]))
 
-    err = (f.data.max(1)[1] != y.data)
+    err = (f.max(1)[1] != y)
+
     if size_average: 
-        err = err.sum()/X.size(0)
+        err = err.sum().item()/X.size(0)
     ce_loss = nn.CrossEntropyLoss(reduce=size_average)(f, y)
     return ce_loss, err

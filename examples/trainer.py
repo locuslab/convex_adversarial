@@ -2,7 +2,7 @@
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
-from convex_adversarial import robust_loss
+from convex_adversarial import robust_loss, robust_loss_parallel
 import torch.optim as optim
 
 import numpy as np
@@ -34,7 +34,7 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
         with torch.no_grad(): 
             out = model(Variable(X))
             ce = nn.CrossEntropyLoss()(out, Variable(y))
-            err = (out.data.max(1)[1] != y).float().sum()  / X.size(0)
+            err = (out.max(1)[1] != y).float().sum()  / X.size(0)
 
 
         robust_ce, robust_err = robust_loss(model, epsilon, 
@@ -84,7 +84,7 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
 
 
 def evaluate_robust(loader, model, epsilon, epoch, log, verbose, real_time,
-                    **kwargs):
+                    parallel=False, **kwargs):
     batch_time = AverageMeter()
     losses = AverageMeter()
     errors = AverageMeter()
@@ -100,13 +100,20 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose, real_time,
         X,y = X.cuda(), y.cuda().long()
         if y.dim() == 2: 
             y = y.squeeze(1)
-        robust_ce, robust_err = robust_loss(model, epsilon, 
-                                            Variable(X), 
-                                            Variable(y),
-                                             **kwargs)
+
+        # if parallel: 
+        robust_ce, robust_err = robust_loss_parallel(model, epsilon, X, y,
+           **kwargs)
+        print(robust_ce, robust_err)
+        # else:
+        robust_ce, robust_err = robust_loss(model, epsilon, X, y, **kwargs)
+        print(robust_ce, robust_err)
+        assert False
+
+
         out = model(Variable(X))
         ce = nn.CrossEntropyLoss()(out, Variable(y))
-        err = (out.data.max(1)[1] != y).float().sum()  / X.size(0)
+        err = (out.max(1)[1] != y).float().sum()  / X.size(0)
 
         # _,pgd_err = _pgd(model, Variable(X), Variable(y), epsilon)
 
@@ -334,12 +341,12 @@ def evaluate_madry(loader, model, epsilon, epoch, log, verbose):
 
 
 def robust_loss_cascade(models, epsilon, X, y, **kwargs): 
-    total_robust_ce = 0
-    total_ce = 0
-    total_robust_err = 0
-    total_err = 0
+    total_robust_ce = 0.
+    total_ce = 0.
+    total_robust_err = 0.
+    total_err = 0.
 
-    batch_size = X.size(0)
+    batch_size = float(X.size(0))
 
     I = torch.arange(X.size(0)).type_as(y.data)
 
@@ -348,7 +355,7 @@ def robust_loss_cascade(models, epsilon, X, y, **kwargs):
         out = model(X)
         ce = nn.CrossEntropyLoss(reduce=False)(out, y)
         _, uncertified = robust_loss(model, epsilon, X,
-                                     out.max(1)[1].squeeze(),
+                                     out.max(1)[1],
                                      size_average=False, **kwargs)
         certified = ~uncertified
         l = []
@@ -367,7 +374,6 @@ def robust_loss_cascade(models, epsilon, X, y, **kwargs):
                                                  y_cert, 
                                                  size_average=False,
                                                  **kwargs)
-            
             # add statistics for certified examples
             total_robust_ce += robust_ce.sum()
             total_ce += ce.data.sum()
@@ -382,13 +388,12 @@ def robust_loss_cascade(models, epsilon, X, y, **kwargs):
             else: 
                 robust_ce = total_robust_ce/batch_size
                 ce = total_ce/batch_size
-                robust_err = total_robust_err/batch_size
-                err = total_err/batch_size
+                robust_err = total_robust_err.item()/batch_size
+                err = total_err.item()/batch_size
                 return robust_ce, robust_err, ce, err, None
         ####################################################################
-
     # compute normal ce and robust ce for the last model
-    out = models[-1](Variable(X.data, volatile=True))
+    out = models[-1](X)
     ce = nn.CrossEntropyLoss(reduce=False)(out, y)
     err = (out.data.max(1)[1] != y.data).float()
 
@@ -403,12 +408,12 @@ def robust_loss_cascade(models, epsilon, X, y, **kwargs):
 
     robust_ce = total_robust_ce/batch_size
     ce = total_ce/batch_size
-    robust_err = total_robust_err/batch_size
-    err = total_err/batch_size
+    robust_err = total_robust_err.item()/batch_size
+    err = total_err.item()/batch_size
 
     _, uncertified = robust_loss(models[-1], epsilon, 
-                                 Variable(X.data, volatile=True), 
-                                 Variable(out.data.max(1)[1].squeeze()), 
+                                 X, 
+                                 out.max(1)[1], 
                                  size_average=False,
                                  **kwargs)
     if uncertified.sum() > 0: 
@@ -434,7 +439,7 @@ def sampler_robust_cascade(loader, models, epsilon, **kwargs):
         y = y.cuda()
 
         _, _, _, _, uncertified = robust_loss_cascade(models, epsilon, 
-                                                   Variable(X, volatile=True), 
+                                                   Variable(X), 
                                                    Variable(y), 
                                                    **kwargs)
         if uncertified is not None: 
@@ -478,14 +483,14 @@ def evaluate_robust_cascade(loader, models, epsilon, epoch, log, verbose, **kwar
         # measure accuracy and record loss
         losses.update(ce, X.size(0))
         errors.update(err, X.size(0))
-        robust_losses.update(robust_ce.data[0], X.size(0))
+        robust_losses.update(robust_ce.item(), X.size(0))
         robust_errors.update(robust_err, X.size(0))
 
         # measure elapsed time
         batch_time.update(time.time()-end)
         end = time.time()
 
-        print(epoch, i, robust_ce.data[0], robust_err, ce, err,
+        print(epoch, i, robust_ce.item(), robust_err, ce.item(), err,
            file=log)
         if verbose: 
             endline = '\n' if  i % verbose == 0 else '\r'

@@ -44,34 +44,14 @@ if __name__ == "__main__":
     random.seed(0)
     numpy.random.seed(0)
 
-    if args.model == 'vgg': 
+    if args.model == 'large': 
         # raise ValueError
-        model = pblm.cifar_model_vgg().cuda()
-        if args.l1_test == 'exact': 
-            _, test_loader = pblm.cifar_loaders(1, shuffle_test=True)
-            test_loader = [tl for i,tl in enumerate(test_loader) if i < 1000]
+        model = pblm.cifar_model_large().cuda()
     elif args.model == 'resnet': 
         model = pblm.cifar_model_resnet(N=args.resnet_N, factor=args.resnet_factor).cuda()
-        if args.l1_test == 'exact': 
-            _, test_loader = pblm.cifar_loaders(1, shuffle_test=True)
-            test_loader = [tl for i,tl in enumerate(test_loader) if i < 1000]
-        #model = pblm.mnist_model_large().cuda()
-
-    elif args.model == 'wide': 
-        model = pblm.cifar_model_wide(args.model_factor).cuda()
-    elif args.model == 'deep': 
-        model = pblm.cifar_model_deep(args.model_factor).cuda()
     else: 
         model = pblm.cifar_model().cuda() 
-        _, test_loader = pblm.cifar_loaders(25)
-        #model.load_state_dict(torch.load('l1_truth/mnist_nonexact_rerun_baseline_False_batch_size_50_delta_0.01_epochs_20_epsilon_0.1_l1_proj_200_l1_test_exact_l1_train_median_lr_0.001_m_10_seed_0_starting_epsilon_0.05_model.pth'))
-
-    for m in model.modules():
-        if isinstance(m, nn.Conv2d):
-            n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-            m.weight.data.normal_(0, math.sqrt(2. / n))
-            m.bias.data.zero_()
-
+        
     starting_epoch=0
     if args.resume: 
         checkpoint = torch.load(args.prefix + '_checkpoint.pth')

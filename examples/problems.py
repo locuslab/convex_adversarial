@@ -55,21 +55,6 @@ def model_deep(in_ch, out_width, k, n1=8, n2=16, linear_size=100):
     )
     return model
 
-def init_scale(model, X, epsilon): 
-    dual = DualNetBounds(model, X, epsilon)
-    print("Scaling down weights...")
-    for i in range(1, len(dual.affine)):
-        d0 = (dual.zu[0] - dual.zl[0]).mean().data
-        di = (dual.zu[i]-dual.zl[i]).mean().data
-        while di[0] > d0[0]: 
-            # print("scaling by 0.5, ", i)
-            dual.affine[i].l.weight.data *= 0.5
-            del dual
-            dual = DualNetBounds(model, X, epsilon)
-            d0 = (dual.zu[0] - dual.zl[0]).mean().data
-            di = (dual.zu[i]-dual.zl[i]).mean().data
-    del dual
-
 class Flatten(nn.Module):
     def forward(self, x):
         return x.view(x.size(0), -1)
@@ -103,166 +88,13 @@ def mnist_model():
     )
     return model
 
-
-def mnist_model_kernel(): 
-    model = nn.Sequential(
-        nn.Conv2d(1, 16, 8, stride=2, padding=3),
-        nn.ReLU(),
-        nn.Conv2d(16, 32, 8, stride=2, padding=3),
-        nn.ReLU(),
-        Flatten(),
-        nn.Linear(32*7*7,100),
-        nn.ReLU(),
-        nn.Linear(100, 10)
-    )
-    return model
-
-def mnist_model_threshold(): 
-    model = nn.Sequential(
-        nn.Conv2d(1, 16, 1, stride=1, padding=0),
-        nn.ReLU(),
-        nn.Conv2d(16, 16, 4, stride=2, padding=1),
-        nn.ReLU(),
-        nn.Conv2d(16, 32, 4, stride=2, padding=1),
-        nn.ReLU(),
-        Flatten(),
-        nn.Linear(32*7*7,100),
-        nn.ReLU(),
-        nn.Linear(100, 10)
-    )
-    return model
-
-def mnist_model_deep_wide():
-    # in filters, out width, depth, filters1, filters2
-    return model_deep(1, 7, 3, n1=32, n2=64, linear_size=512) 
-
-def model_deep_bn(in_ch, out_width, k, n1=8, n2=16, linear_size=100): 
-    def group(inf, outf, N): 
-        if N == 1: 
-            conv = [nn.Conv2d(inf, outf, 4, stride=2, padding=1, bias=False), 
-                    nn.BatchNorm2d(outf),
-                    nn.ReLU()]
-        else: 
-            conv = [nn.Conv2d(inf, outf, 3, stride=1, padding=1, bias=False), 
-                    nn.BatchNorm2d(outf),
-                    nn.ReLU()]
-            for _ in range(1,N-1):
-                conv.append(nn.Conv2d(outf, outf, 3, stride=1, padding=1, bias=False))
-                conv.append(nn.BatchNorm2d(outf))
-                conv.append(nn.ReLU())
-            conv.append(nn.Conv2d(outf, outf, 4, stride=2, padding=1, bias=False))
-            conv.append(nn.BatchNorm2d(outf))
-            conv.append(nn.ReLU())
-        return conv
-
-    conv1 = group(in_ch, n1, k)
-    conv2 = group(n1, n2, k)
-
-
-    model = nn.Sequential(
-        *conv1, 
-        *conv2,
-        Flatten(),
-        nn.Linear(n2*out_width*out_width,linear_size),
-        nn.ReLU(),
-        nn.Linear(100, 10)
-    )
-    return model
-
-def mnist_model_deep_bn(): 
-    # use 4 layers which doesn't converge without bn
-    return model_deep_bn(1,7,4)
-
-def mnist_model_bn(): 
-    model = nn.Sequential(
-        nn.Conv2d(1, 16, 4, stride=2, padding=1, bias=False),
-        nn.BatchNorm2d(16), 
-        nn.ReLU(),
-        nn.Conv2d(16, 32, 4, stride=2, padding=1, bias=False),
-        nn.BatchNorm2d(32), 
-        nn.ReLU(),
-        Flatten(),
-        nn.Linear(32*7*7,100),
-        nn.ReLU(),
-        nn.Linear(100, 10)
-    )
-    return model
-
 def mnist_model_wide(k): 
     return model_wide(1, 7, k)
 
 def mnist_model_deep(k): 
     return model_deep(1, 7, k)
 
-def mnist_model_resnet(): 
-    model = DenseSequential(
-        nn.Conv2d(1, 16, 4, stride=2, padding=1),
-        nn.ReLU(),
-        Dense(nn.Conv2d(16, 32, 4, stride=2, padding=1)),
-        nn.ReLU(),
-        Dense(nn.Conv2d(16, 32, 2, stride=2, padding=0), 
-              None, 
-              nn.Conv2d(32, 32, 3, stride=1, padding=1)),
-        nn.ReLU(),
-        Flatten(),
-        nn.Linear(32*7*7,100),
-        nn.ReLU(),
-        nn.Linear(100, 10)
-    )
-    return model
-
-
-# def mnist_model_resnet_bn(): 
-#     model = DenseSequential(
-#         nn.Conv2d(1, 16, 4, stride=2, padding=1),
-#         nn.ReLU(),
-#         Dense(nn.Conv2d(16, 32, 4, stride=2, padding=1, bias=False)),
-#         nn.BatchNorm2d(32), 
-#         nn.ReLU(),
-#         Dense(nn.Conv2d(16, 32, 1, stride=2, padding=0, bias=False), 
-#               None, 
-#               nn.Conv2d(32, 32, 3, stride=1, padding=1, bias=False)),
-#         nn.BatchNorm2d(32), 
-#         nn.ReLU(),
-#         Flatten(),
-#         nn.Linear(32*7*7,100),
-#         nn.ReLU(),
-#         nn.Linear(100, 10)
-#     )
-#     return model
-
-
-# def mnist_model_resnet(): 
-#     model = DenseSequential(
-#         nn.Conv2d(1, 32, 4, stride=2, padding=1),
-#         nn.ReLU(),
-#         Dense(nn.Conv2d(32, 64, 4, stride=2, padding=1)),
-#         nn.ReLU(),
-#         Dense(nn.Conv2d(32, 64, 1, stride=2, padding=0), 
-#               None, 
-#               nn.Conv2d(64, 64, 3, stride=1, padding=1)),
-#         nn.ReLU(),
-#         Flatten(),
-#         nn.Linear(64*7*7,1024),
-#         nn.ReLU(),
-#         nn.Linear(1024, 10)
-#     )
-#     return model
-
 def mnist_model_large(): 
-    model = nn.Sequential(
-        nn.Conv2d(1, 32, 4, stride=2, padding=1),
-        nn.ReLU(),
-        nn.Conv2d(32, 64, 4, stride=2, padding=1),
-        nn.ReLU(),
-        Flatten(),
-        nn.Linear(64*7*7,1024),
-        nn.ReLU(),
-        nn.Linear(1024, 10)
-    )
-    return model
-
-def mnist_model_vgg(): 
     model = nn.Sequential(
         nn.Conv2d(1, 32, 3, stride=1, padding=1),
         nn.ReLU(),
@@ -303,12 +135,6 @@ def svhn_model():
         nn.Linear(100, 10)
     ).cuda()
     return model
-
-def svhn_model_wide(k): 
-    return model_wide(3, 8, k)
-
-def svhn_model_deep(k): 
-    return model_deep(3, 8, k)
 
 def har_loaders(batch_size):     
     X_te = torch.from_numpy(np.loadtxt('../datasets/UCI HAR Dataset/test/X_test.txt')).float()
@@ -355,7 +181,6 @@ def har_500_250_100_model():
 
 def cifar_loaders(batch_size, shuffle_test=False): 
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     # std=[0.229, 0.224, 0.225])
                                      std=[0.225, 0.225, 0.225])
     train = datasets.CIFAR10('./data', train=True, download=True, 
         transform=transforms.Compose([
@@ -365,7 +190,6 @@ def cifar_loaders(batch_size, shuffle_test=False):
             normalize,
         ]))
     test = datasets.CIFAR10('./data', train=False, 
-        # transform=transforms.Compose([transforms.ToTensor()]))
         transform=transforms.Compose([transforms.ToTensor(), normalize]))
     train_loader = torch.utils.data.DataLoader(train, batch_size=batch_size,
         shuffle=True, pin_memory=True)
@@ -391,85 +215,30 @@ def cifar_model():
             m.bias.data.zero_()
     return model
 
-
-def cifar_model_wide(k): 
-    return model_wide(3, 8, k)
-
-def cifar_model_deep(k): 
-    return model_deep(3, 8, k)
-
-def cifar_model_vgg(): 
+def cifar_model_large(): 
     model = nn.Sequential(
-        nn.Conv2d(3, 64, 4, stride=2, padding=1),
+        nn.Conv2d(3, 32, 3, stride=1, padding=1),
         nn.ReLU(),
-        nn.Conv2d(64, 128, 4, stride=2, padding=1),
+        nn.Conv2d(32, 32, 4, stride=2, padding=1),
         nn.ReLU(),
-        nn.Conv2d(128, 256, 3, stride=1, padding=1),
+        nn.Conv2d(32, 64, 3, stride=1, padding=1),
         nn.ReLU(),
-        nn.Conv2d(256, 256, 4, stride=2, padding=1),
-        nn.ReLU(),
-        nn.Conv2d(256, 512, 3, stride=1, padding=1),
-        nn.ReLU(),
-        nn.Conv2d(512, 512, 4, stride=2, padding=1),
-        nn.ReLU(),
-        nn.Conv2d(512, 512, 3, stride=1, padding=1),
-        nn.ReLU(),
-        nn.Conv2d(512, 512, 4, stride=2, padding=1),
+        nn.Conv2d(64, 64, 4, stride=2, padding=1),
         nn.ReLU(),
         Flatten(),
-        nn.Linear(512,512),
+        nn.Linear(64*8*8,512),
         nn.ReLU(),
         nn.Linear(512,512),
         nn.ReLU(),
         nn.Linear(512,10)
     )
+    return model
     for m in model.modules():
         if isinstance(m, nn.Conv2d):
             n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
             m.weight.data.normal_(0, math.sqrt(2. / n))
             m.bias.data.zero_()
     return model
-
-class ResBlock(nn.Module): 
-    def __init__(self, in_ch, out_ch, stride=1):
-        super(ResBlock,self).__init__()
-        if stride != 1:
-            self.shortcut = nn.Conv2d(in_ch, out_ch,
-                kernel_size=1, stride=stride, bias=False)
-        else:
-            self.shortcut = nn.Sequential()
-        self.conv1 = nn.Conv2d(in_ch, out_ch, kernel_size=3, stride=stride,
-                                padding=1)
-        self.conv2 = nn.Conv2d(out_ch, out_ch, kernel_size=3, stride=1,
-                                padding=1)
-
-    def forward(self, x): 
-        out = F.relu(self.conv1(x))
-        out = self.conv2(out)
-        out += self.shortcut(x)
-        out = F.relu(out)
-        return out
-
-
-def mnist_model_resnet_bn(): 
-    model = DenseSequential(
-        nn.Conv2d(1, 16, 4, stride=2, padding=1),
-        nn.ReLU(),
-        Dense(nn.Conv2d(16, 32, 4, stride=2, padding=1, bias=False)),
-        nn.BatchNorm2d(32), 
-        nn.ReLU(),
-        Dense(nn.Conv2d(16, 32, 1, stride=2, padding=0, bias=False), 
-              None, 
-              nn.Conv2d(32, 32, 3, stride=1, padding=1, bias=False)),
-        nn.BatchNorm2d(32), 
-        nn.ReLU(),
-        Flatten(),
-        nn.Linear(32*7*7,100),
-        nn.ReLU(),
-        nn.Linear(100, 10)
-    )
-    return model
-
 
 def cifar_model_resnet(N = 5, factor=10): 
     def  block(in_filters, out_filters, k, downsample): 
@@ -512,15 +281,7 @@ def cifar_model_resnet(N = 5, factor=10):
     model = DenseSequential(
         *layers
     )
-    # _ = [torch.autograd.Variable(torch.zeros(1,3,32,32))]
-    # for l in layers:
-    #     if isinstance(l, Dense): 
-    #         _.append(l(*_))
-    #     else:
-    #         _.append(l(_[-1]))
-    #     print(_[-1].size())
-    # assert False
-    # print(model)
+    
     for m in model.modules():
         if isinstance(m, nn.Conv2d):
             n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
