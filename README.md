@@ -147,14 +147,47 @@ SVHN can be found in the [paper][paper]. Results for the scalable version with
 random projections on residual networks and on the CIFAR10 dataset can be found
 in our [second paper][scalable_paper].
 
+## Modularity
+Due to the modularity of the implementation, it is easy to extend the
+methodology to additional dual layers. A dual layer can be implemented by
+filling in the following signature: 
+
+```python
+class DualLayer(nn.Module): 
+    def apply(self, dual_layer): 
+        ''' Pass variables needed to compute the objective through the given
+        dual layer. '''
+        pass
+
+    def fval(self, nu=None, nu_prev=None): 
+        ''' Compute the objective value of the dual layer (h_i). '''
+        pass
+
+    def affine(self, *xs): 
+        ''' Given previous layer outputs xs, apply the affine dual layer
+        (g_ij). '''
+        pass
+
+    def affine_transpose(self, *xs): 
+        ''' Given previous layer outputs xs, apply the transpose of the affine
+        dual layer (g_ij^T). '''
+        pass
+```
+
 ## What is in this repository? 
 + The code implementing the robust loss function that measures the convex
-  outer bounds on the adversarial polytope as described in the paper. It is
-  implemented for linear and convolutional networks with ReLU activation on all
-  layers except the last. 
+  outer bounds on the adversarial polytope as described in the paper. 
++ The implemented dual layers are linear layers, convolutional layers, ReLU
+  layers, ReLU layers with random projections, all of which can be used with
+  skip connections. 
++ The implemented dual input constraints are l1 bounded perturbations, its
+projection variant, and l1 bounded perturbation with an additional [0,1]
+rectangle box constraint. 
 + Examples, containing the following: 
   + Code to train a robust classifier for the MNIST, Fashion-MNIST, HAR, and SVHN datasets. 
   + Code to generate and plot the 2D toy example.
   + Code to find minimum distances to the decision boundary of the neural network
   + Code to attack models using FGS and PGD
   + Code to solve the primal problem exactly using CVXPY
+  + Code to train large MNIST and CIFAR10 models using random projections and
+  residual networks
