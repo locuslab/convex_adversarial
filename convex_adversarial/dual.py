@@ -539,7 +539,7 @@ def select_layer(layer, dual_net, X, l1_proj, l1_type, in_f, out_f, dense_ti, zs
         raise ValueError("No module for layer {}".format(str(layer.__class__.__name__)))
 
 class DualNetBounds: 
-    def __init__(self, net, X, epsilon, alpha_grad=False, scatter_grad=False,
+    def __init__(self, net, X, epsilon, 
                  l1_proj=None, l1_type='exact', bounded_input=False):
         """ 
         net : ReLU network

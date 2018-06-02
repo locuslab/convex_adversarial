@@ -33,7 +33,7 @@ You can install this repository with
     only for a *single* example and using  
     data parallelism. This is useful for exact evaluation if a single 
     example doesn't fit in memory. 
-+ `DualNetBounds(net, X, epsilon, alpha_grad=False, scatter_grad=False)`
++ `DualNetBounds(net, X, epsilon, l1_proj=None, l1_type='exact', bounded_input=False)`
     is a class that computes the layer-wise upper and lower bounds for all
     activations in the network. This is useful if you are only interested 
     in the bounds and not the robust loss, and corresponds to Algorithm 
