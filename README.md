@@ -47,7 +47,7 @@ You can install this repository with
 
 To create sequential PyTorch modules with skip connections, we provide a
 generalization of the PyTorch module `nn.Sequential`. Specifically, we have a
-`DenseSequential` module that is identical to `nn.Sequential' but also takes
+`DenseSequential` module that is identical to `nn.Sequential` but also takes
 in `Dense' modules. The `Dense' modules consist of `m` layers, and applies
 these `m` layers to the last `m` outputs of the network. 
 
@@ -143,7 +143,9 @@ caused by *any* adversarial perturbation. In this case, the robust network has
 a robust error of 5.8%, and so we are guaranteed that no adversarial attack
 can ever get an error rate of larger than 5.8%. In comparison, the robust
 error of the standard network is 100%. More results on HAR, Fashion-MNIST, and
-SVHN can be found in the [paper][paper]. 
+SVHN can be found in the [paper][paper]. Results for the scalable version with
+random projections on residual networks and on the CIFAR10 dataset can be found
+in our [second paper][scalable_paper].
 
 ## What is in this repository? 
 + The code implementing the robust loss function that measures the convex
