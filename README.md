@@ -27,8 +27,12 @@ You can install this repository with
     radius `epsilon` for examples `X` and their labels `y`. You can use 
     this as a drop in replacement for, say, `nn.CrossEntropyLoss()`, and is
     equivalent to the objective of Equation 14 in the original paper. 
-    To use the scalable version using the 
-+ `robust_loss_parallel
+    To use the scalable version, specify a projection dimension with `l1_proj`
+    and set `l1_type` to `median`. 
++ `robust_loss_parallel` computes the same objective as `robust_loss`, but
+    only for a *single* example and using  
+    data parallelism. This is useful for exact evaluation if a single 
+    example doesn't fit in memory. 
 + `DualNetBounds(net, X, epsilon, alpha_grad=False, scatter_grad=False)`
     is a class that computes the layer-wise upper and lower bounds for all
     activations in the network. This is useful if you are only interested 
@@ -38,6 +42,28 @@ You can install this repository with
     bound on the primal problem described in the paper for a given 
     objective vector c. This corresponds to computing objective of Theorem 1 in
     the paper (Equation 5). 
+
+### Residual networks / skip connections
+
+To create sequential PyTorch modules with skip connections, we provide a
+generalization of the PyTorch module `nn.Sequential`. Specifically, we have a
+`DenseSequential` module that is identical to `nn.Sequential' but also takes
+in `Dense' modules. The `Dense' modules consist of `m` layers, and applies
+these `m` layers to the last `m` outputs of the network. 
+
+As an example, the
+following is a simple two layer network with a single skip connection. 
+The first layer is identical to a normal `nn.Conv2d` layer. The second layer has
+a skip connection from the layer with 16 filters and also a normal convolutional
+layer from the previous layer with 32 filters. 
+
+```python
+residual_block = DenseSequential([
+    Dense(nn.Conv2d(16,32,...)),
+    nn.ReLU(), 
+    Dense(nn.Conv2d(16,32,...), None, nn.Conv2d(32,32,...))
+])
+```
 
 ## Why do we need robust networks? 
 While networks are capable of representing highly complex functions. For
