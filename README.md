@@ -6,6 +6,7 @@
 [scalable_paper]: https://arxiv.org/abs/1805.12514
 
 ## News
++ 6/2/2018 - Version 0.3 released to reflect the new paper. 
 + 5/31/2018 - New paper on a scalable version for models with skip connections
 and a fully modular implementation for simple extension. Code base with these
 improvements with a port to PyTorch 0.4 will be released shortly. 
@@ -20,12 +21,14 @@ repository.
 ## Installation & Usage
 You can install this repository with 
 `pip install convex_adversarial`. The package contains the following functions: 
-+ `robust_loss(net, epsilon, X, y, 
-                size_average=True, alpha_grad=False, scatter_grad=False)`
++ `robust_loss(net, epsilon, X, y, l1_proj=None,
+                 l1_type='exact', bounded_input=False, size_average=True)`
     computes a robust loss function for a given ReLU network `net` and l1 
     radius `epsilon` for examples `X` and their labels `y`. You can use 
-    this as a drop in replacement for, say, `nn.CrossEntropyLoss`, and is
-    equivalent to the objective of Equation 14 in the paper. 
+    this as a drop in replacement for, say, `nn.CrossEntropyLoss()`, and is
+    equivalent to the objective of Equation 14 in the original paper. 
+    To use the scalable version using the 
++ `robust_loss_parallel
 + `DualNetBounds(net, X, epsilon, alpha_grad=False, scatter_grad=False)`
     is a class that computes the layer-wise upper and lower bounds for all
     activations in the network. This is useful if you are only interested 
