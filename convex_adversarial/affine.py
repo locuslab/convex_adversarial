@@ -203,25 +203,19 @@ class AffineDense(Dense, Affine):
 
 
 def transpose_all(ls): 
-    # if all(isinstance(l, Dense) for l in ls):
-    layers = [Dense() if isinstance(l,Dense) else l for l in ls]
-    for i,l in reversed(list(enumerate(ls))): 
-        if not isinstance(l,Dense):
+    transposed = [[] if isinstance(l,Dense) else None for l in ls]
+    for i,l in enumerate(ls): 
+        if not isinstance(l,Dense): 
             continue
-        for j,W in enumerate(l.Ws): 
-            if W is not None:
-                # WARNING HACK ONLY FOR 1 SKIP CONNECTIONS
-                if len(layers[i+j-len(l.Ws)+1].Ws)  == 1: 
-                    layers[i+j-len(l.Ws)+1].Ws.append(None)
-                layers[i+j-len(l.Ws)+1].Ws.append(toAffineTranspose(W))
+        for j,W in enumerate(l.Ws):
+            k = i+j - (len(l.Ws) - 1)
+            if W is not None: 
+                while len(transposed[k]) < len(l.Ws) - (j+1): 
+                    transposed[k].append(None)
+                transposed[k].append(toAffineTranspose(W))
+    layers = [Dense() if isinstance(l,Dense) else l for l in ls]
+    for l,t in zip(layers, transposed): 
+        if isinstance(l,Dense): 
+            for t0 in reversed(t): 
+                l.Ws.append(t0)
     return layers
-    # raise NotImplementedError
-    # elif all(not isinstance(l,Dense) for l in ls):
-    #     return [toAffineTranspose(l) for l in ls]
-    # else:
-    #     raise ValueError('In order to convert Dense Affine layers we ' 
-    #                      'need all layers to be dense in this '
-                         # 'implementation. ')
-
-# class AffineTransposeDense(Dense): 
-#     def __init__(self, ls): 

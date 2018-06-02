@@ -616,9 +616,6 @@ class DualNetBounds:
         
         nu.append(None)
         nu = list(reversed(nu))
-        l0 = [l.fval(nu=n, nu_prev=nprev) 
-            for l,nprev,n in zip(dual_net, nu[:-1],nu[1:])]
-        print(l0[0])
         return sum(l.fval(nu=n, nu_prev=nprev) 
             for l,nprev,n in zip(dual_net, nu[:-1],nu[1:]))
 
@@ -732,9 +729,7 @@ def robust_loss_parallel(net, epsilon, X, y, l1_proj=None, l1_eps=None, m=None,
             # should be negative, but doesn't matter with abs()
             nu_1 = D(dual_net[0].nu_1[0]).abs().sum(1)
             nu_x = D(dual_net[0].nu_x[0])
-            # print(nu_x.size(), D(dual_net[0].nu_x[0]).size(), dual_net[0].nu_x[0].size())
-            # print(DualSequential(dual_net, net)(dual_net[0].nu_x[0]).size())
-            # print(nn.DataParallel(DualSequential(dual_net, net))(dual_net[0].nu_x[0]).size())
+
             rest = 0
             rest_l = 0
             rest_u = 0
@@ -743,9 +738,7 @@ def robust_loss_parallel(net, epsilon, X, y, l1_proj=None, l1_eps=None, m=None,
                 out = dual_helper(dual_layer, D)
                 rest_l += out[0]
                 rest_u += out[1]
-            # print(dual_net[0].nu_x[0].size(), D(dual_net[0].nu_x[0]).size())
-            # print(nu_x.size(), nu_1.size(),
-               # rest_l.size())
+
             zl = nu_x - epsilon*nu_1 + rest_l
             zu = nu_x + epsilon*nu_1 + rest_u
 
@@ -773,9 +766,6 @@ def robust_loss_parallel(net, epsilon, X, y, l1_proj=None, l1_eps=None, m=None,
     
     nu.append(None)
     nu = list(reversed(nu))
-    l0 = [l.fval(nu=n, nu_prev=nprev) 
-        for l,nprev,n in zip(dual_net, nu[:-1],nu[1:])]
-    print(l0[0])
     f = -sum(l.fval(nu=n, nu_prev=nprev) 
         for l,nprev,n in zip(dual_net, nu[:-1],nu[1:]))
 

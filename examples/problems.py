@@ -340,48 +340,40 @@ def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3,
     if args.starting_epsilon is None:
         args.starting_epsilon = args.epsilon 
     if args.prefix: 
-        # if args.vgg: 
-        #     args.prefix += '_vgg'
-        # elif args.large: 
-        #     args.prefix += '_large'
-        # elif args.resnet: 
-        #     args.prefix += '_resnet'
         if args.model is not None: 
             args.prefix += '_'+args.model
 
         if args.method is not None: 
             args.prefix += '_'+args.method
 
-        if args.eval: 
-            args.prefix += '_eval_' + args.eval.replace('/','_')
-        else:
-            banned = ['verbose', 'prefix',
-                      'resume', 'baseline', 'eval', 
-                      'method', 'model', 'cuda_ids', 'load']
-            if args.method == 'baseline':
-                banned += ['epsilon', 'starting_epsilon', 'schedule_length', 
-                           'l1_test', 'l1_train', 'm', 'l1_proj']
+        banned = ['verbose', 'prefix',
+                  'resume', 'baseline', 'eval', 
+                  'method', 'model', 'cuda_ids', 'load']
+        if args.method == 'baseline':
+            banned += ['epsilon', 'starting_epsilon', 'schedule_length', 
+                       'l1_test', 'l1_train', 'm', 'l1_proj']
 
-            # if not using adam, ignore momentum and weight decay
-            if args.opt == 'adam': 
-                banned += ['momentum', 'weight_decay']
+        # if not using adam, ignore momentum and weight decay
+        if args.opt == 'adam': 
+            banned += ['momentum', 'weight_decay']
 
-            if args.m == 1: 
-                banned += ['m']
-            if args.cascade == 1: 
-                banned += ['cascade']
+        if args.m == 1: 
+            banned += ['m']
+        if args.cascade == 1: 
+            banned += ['cascade']
 
-            # if not using a model that uses model_factor, 
-            # ignore model_factor
-            if args.model not in ['wide', 'deep']: 
-                banned += ['model_factor']
+        # if not using a model that uses model_factor, 
+        # ignore model_factor
+        if args.model not in ['wide', 'deep']: 
+            banned += ['model_factor']
 
-            if args.model != 'resnet': 
-                banned += ['resnet_N', 'resnet_factor']
+        if args.model != 'resnet': 
+            banned += ['resnet_N', 'resnet_factor']
 
-            for arg in sorted(vars(args)): 
-                if arg not in banned and getattr(args,arg) is not None: 
-                    args.prefix += '_' + arg + '_' +str(getattr(args, arg))
+        for arg in sorted(vars(args)): 
+            if arg not in banned and getattr(args,arg) is not None: 
+                args.prefix += '_' + arg + '_' +str(getattr(args, arg))
+
         if args.schedule_length > args.epochs: 
             raise ValueError('Schedule length for epsilon ({}) is greater than '
                              'number of epochs ({})'.format(args.schedule_length, args.epochs))
