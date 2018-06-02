@@ -6,7 +6,7 @@
 [scalable_paper]: https://arxiv.org/abs/1805.12514
 
 ## News
-+ 6/2/2018 - Version 0.3 released to reflect the new paper. 
++ 6/2/2018 - Version 0.3.1 released to reflect the new paper. 
 + 5/31/2018 - New paper on a scalable version for models with skip connections
 and a fully modular implementation for simple extension. Code base with these
 improvements with a port to PyTorch 0.4 will be released shortly. 
