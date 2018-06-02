@@ -17,24 +17,6 @@ def batch(A, n):
 def unbatch(A): 
     return A.view(-1, *A.size()[2:])
 
-def select_L(X, k, m, l1_eps, W, l1_type='exact', threshold=None,
-             **kwargs):
-    if l1_type == 'exact' or k*m > threshold: 
-        # print("exact at threshold {}".format(threshold))
-        return L1_engine.L1(X, W, **kwargs)
-    else: 
-        # print("approximate at threshold {}".format(threshold))
-        if not isinstance(k, int): 
-            raise ValueError('l1 must be an integer')
-
-        if l1_type == 'median': 
-            return L1_engine.L1_median(X, k, m, l1_eps, W, **kwargs)
-
-        elif l1_type == 'geometric': 
-            return L1_engine.L1_geometric(X, k, m, l1_eps, W, **kwargs)
-        else:
-            raise ValueError("Unknown l1_type: {}".format(l1_type))
-
 class InfBall(nn.Module):
     def __init__(self, X, epsilon): 
         super(InfBall, self).__init__()
