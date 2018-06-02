@@ -540,7 +540,7 @@ def select_layer(layer, dual_net, X, l1_proj, l1_type, in_f, out_f, dense_ti, zs
 
 class DualNetBounds: 
     def __init__(self, net, X, epsilon, alpha_grad=False, scatter_grad=False, 
-                 l1_proj=None, l1_eps=None, m=None,
+                 l1_proj=None, 
                  l1_type='exact', bounded_input=False):
         """ 
         net : ReLU network
@@ -674,7 +674,7 @@ def dual_helper(dual_layer, D):
         print(dual_layer)
         raise NotImplementedError
 
-def robust_loss_parallel(net, epsilon, X, y, l1_proj=None, l1_eps=None, m=None,
+def robust_loss_parallel(net, epsilon, X, y, l1_proj=None, 
                  l1_type='exact', bounded_input=False, size_average=True): 
     if any('BatchNorm2d' in str(l.__class__.__name__) for l in net): 
         raise NotImplementedError
