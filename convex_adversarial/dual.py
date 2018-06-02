@@ -17,24 +17,6 @@ def batch(A, n):
 def unbatch(A): 
     return A.view(-1, *A.size()[2:])
 
-def select_L(X, k, m, l1_eps, W, l1_type='exact', threshold=None,
-             **kwargs):
-    if l1_type == 'exact' or k*m > threshold: 
-        # print("exact at threshold {}".format(threshold))
-        return L1_engine.L1(X, W, **kwargs)
-    else: 
-        # print("approximate at threshold {}".format(threshold))
-        if not isinstance(k, int): 
-            raise ValueError('l1 must be an integer')
-
-        if l1_type == 'median': 
-            return L1_engine.L1_median(X, k, m, l1_eps, W, **kwargs)
-
-        elif l1_type == 'geometric': 
-            return L1_engine.L1_geometric(X, k, m, l1_eps, W, **kwargs)
-        else:
-            raise ValueError("Unknown l1_type: {}".format(l1_type))
-
 class InfBall(nn.Module):
     def __init__(self, X, epsilon): 
         super(InfBall, self).__init__()
@@ -558,7 +540,7 @@ def select_layer(layer, dual_net, X, l1_proj, l1_type, in_f, out_f, dense_ti, zs
 
 class DualNetBounds: 
     def __init__(self, net, X, epsilon, alpha_grad=False, scatter_grad=False, 
-                 l1_proj=None, l1_eps=None, m=None,
+                 l1_proj=None, 
                  l1_type='exact', bounded_input=False):
         """ 
         net : ReLU network
@@ -692,7 +674,7 @@ def dual_helper(dual_layer, D):
         print(dual_layer)
         raise NotImplementedError
 
-def robust_loss_parallel(net, epsilon, X, y, l1_proj=None, l1_eps=None, m=None,
+def robust_loss_parallel(net, epsilon, X, y, l1_proj=None, 
                  l1_type='exact', bounded_input=False, size_average=True): 
     if any('BatchNorm2d' in str(l.__class__.__name__) for l in net): 
         raise NotImplementedError
