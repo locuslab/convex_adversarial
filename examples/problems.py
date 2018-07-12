@@ -405,8 +405,8 @@ def args2kwargs(args, X=None):
             print('Specified l1_epsilon={}'.format(args.l1_eps))
         kwargs = {
             'l1_proj' : args.l1_proj, 
-            'l1_eps' : args.l1_eps, 
-            'm' : args.m
+            # 'l1_eps' : args.l1_eps, 
+            # 'm' : args.m
         }
     else:
         kwargs = {
