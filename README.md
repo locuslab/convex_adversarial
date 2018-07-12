@@ -20,7 +20,12 @@ repository.
 
 ## Installation & Usage
 You can install this repository with 
-`pip install convex_adversarial`. The package contains the following functions: 
+`pip install convex_adversarial` 
+
+If you wish to have the version of code that reflects the first paper, use 
+`pip install convex_adversal=0.2`, or clone the [0.2 release on Github](https://github.com/locuslab/convex_adversarial/tree/v0.2). 
+
+The package contains the following functions: 
 + `robust_loss(net, epsilon, X, y, l1_proj=None,
                  l1_type='exact', bounded_input=False, size_average=True)`
     computes a robust loss function for a given ReLU network `net` and l1 
