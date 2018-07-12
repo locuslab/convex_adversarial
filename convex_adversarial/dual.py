@@ -8,7 +8,7 @@ import numpy as np
 # import cvxpy as cp
 
 from . import affine as Aff
-from .utils import Dense
+from .utils import Dense, DenseSequential
 
 import warnings
 
@@ -562,6 +562,8 @@ class DualNetBounds:
         m : number of probabilistic bounds to take the max over
         """
         # need to change that if no batchnorm, can pass just a single example
+        if not isinstance(net, (nn.Sequential, DenseSequential)): 
+            raise ValueError("Network must be a nn.Sequential or DenseSequential module")
         with torch.no_grad(): 
             if any('BatchNorm2d' in str(l.__class__.__name__) for l in net): 
                 zs = [X]
