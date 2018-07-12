@@ -330,7 +330,7 @@ class DualReLU(nn.Module):
             d = d.unsqueeze(1)
 
         if I_ind is not None: 
-            I_ind = I_ind.cuda(device=x.get_device())
+            I_ind = I_ind.to(dtype=torch.long, device=x.device)
             return d[I_ind[:,0]]*x
         else:
             # print('affine for relu', d.size(), x.size())
