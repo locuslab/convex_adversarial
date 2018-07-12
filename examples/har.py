@@ -1,5 +1,5 @@
-import waitGPU
-waitGPU.wait(utilization=20, interval=60)
+# import waitGPU
+# waitGPU.wait(utilization=20, interval=60)
 
 import torch
 import torch.nn as nn
@@ -45,6 +45,7 @@ if __name__ == "__main__":
     torch.cuda.manual_seed(args.seed)
 
     model = pblm.har_500_model().cuda()
+    # model = pblm.har_resnet_model().cuda()
 
     opt = optim.Adam(model.parameters(), lr=args.lr)
     for t in range(args.epochs):

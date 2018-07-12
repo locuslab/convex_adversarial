@@ -137,10 +137,10 @@ def svhn_model():
     return model
 
 def har_loaders(batch_size):     
-    X_te = torch.from_numpy(np.loadtxt('../datasets/UCI HAR Dataset/test/X_test.txt')).float()
-    X_tr = torch.from_numpy(np.loadtxt('../datasets/UCI HAR Dataset/train/X_train.txt')).float()
-    y_te = torch.from_numpy(np.loadtxt('../datasets/UCI HAR Dataset/test/y_test.txt')-1).long()
-    y_tr = torch.from_numpy(np.loadtxt('../datasets/UCI HAR Dataset/train/y_train.txt')-1).long()
+    X_te = torch.from_numpy(np.loadtxt('./data/UCI HAR Dataset/test/X_test.txt')).float()
+    X_tr = torch.from_numpy(np.loadtxt('./data/UCI HAR Dataset/train/X_train.txt')).float()
+    y_te = torch.from_numpy(np.loadtxt('./data/UCI HAR Dataset/test/y_test.txt')-1).long()
+    y_tr = torch.from_numpy(np.loadtxt('./data/UCI HAR Dataset/train/y_train.txt')-1).long()
 
     har_train = td.TensorDataset(X_tr, y_tr)
     har_test = td.TensorDataset(X_te, y_te)
@@ -177,6 +177,16 @@ def har_500_250_100_model():
         nn.ReLU(),
         nn.Linear(100, 6)
     )
+    return model
+
+def har_resnet_model(): 
+    model = DenseSequential(
+        Dense(nn.Linear(561, 561)), 
+        nn.ReLU(), 
+        Dense(nn.Sequential(), None, nn.Linear(561,561)),
+        nn.ReLU(), 
+        nn.Linear(561,6)
+        )
     return model
 
 def cifar_loaders(batch_size, shuffle_test=False): 

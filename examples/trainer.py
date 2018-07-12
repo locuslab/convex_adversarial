@@ -14,7 +14,7 @@ from attacks import _pgd
 DEBUG = False
 
 def train_robust(loader, model, opt, epsilon, epoch, log, verbose, 
-                real_time, clip_grad=None, **kwargs):
+                real_time=False, clip_grad=None, **kwargs):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
@@ -83,8 +83,8 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
     torch.cuda.empty_cache()
 
 
-def evaluate_robust(loader, model, epsilon, epoch, log, verbose, real_time,
-                    parallel=False, **kwargs):
+def evaluate_robust(loader, model, epsilon, epoch, log, verbose, 
+                    real_time=False, parallel=False, **kwargs):
     batch_time = AverageMeter()
     losses = AverageMeter()
     errors = AverageMeter()
@@ -101,14 +101,11 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose, real_time,
         if y.dim() == 2: 
             y = y.squeeze(1)
 
-        # if parallel: 
-        robust_ce, robust_err = robust_loss_parallel(model, epsilon, X, y,
-           **kwargs)
-        print(robust_ce, robust_err)
-        # else:
-        robust_ce, robust_err = robust_loss(model, epsilon, X, y, **kwargs)
-        print(robust_ce, robust_err)
-        assert False
+        if parallel: 
+            robust_ce, robust_err = robust_loss_parallel(model, epsilon, X, y,
+               **kwargs)
+        else:
+                robust_ce, robust_err = robust_loss(model, epsilon, X, y, **kwargs)
 
 
         out = model(Variable(X))

@@ -264,8 +264,15 @@ class DualReshape(nn.Module):
             return 0
 
 class DualReLU(nn.Module): 
-    def __init__(self, I, d, zl): 
+    def __init__(self, zl, zu): 
         super(DualReLU, self).__init__()
+
+
+        d = (zl >= 0).detach().type_as(zl)
+        I = ((zu > 0).detach() * (zl < 0).detach())
+        if I.sum().item() > 0:
+            d[I] += zu[I]/(zu[I] - zl[I])
+
         n = d[0].numel()
         if I.sum().item() > 0: 
             self.I_empty = False
@@ -283,6 +290,7 @@ class DualReLU(nn.Module):
         self.d = d
         self.I = I
         self.zl = zl
+        self.zu = zu
 
     def apply(self, dual_layer): 
         if self.I_empty: 
@@ -333,12 +341,18 @@ class DualReLU(nn.Module):
 
 
 class DualReLUProj(DualReLU): 
-    def __init__(self, I, d, zl, k): 
+    def __init__(self, zl, zu, k): 
+        d = (zl >= 0).detach().type_as(zl)
+        I = ((zu > 0).detach() * (zl < 0).detach())
+        if I.sum().item() > 0:
+            d[I] += zu[I]/(zu[I] - zl[I])
+
         n = I.size(0)
 
         self.d = d
         self.I = I
         self.zl = zl
+        self.zu = zu
 
         if I.sum().item() == 0: 
             warnings.warn('ReLU projection has no origin crossing activations')
@@ -395,7 +409,7 @@ class DualDense(nn.Module):
             elif isinstance(W, nn.Linear): 
                 dual_layer = DualLinear(W, out_features)
             elif isinstance(W, nn.Sequential) and len(W) == 0: 
-                dual_layer = DualSequential()
+                dual_layer = Identity()
             elif W is None:
                 dual_layer = None
             else:
@@ -438,7 +452,7 @@ class DualDense(nn.Module):
             return sum(fvals)
 
 
-class DualBatchNorm2d(): 
+class DualBatchNorm2d(nn.Module): 
     def __init__(self, layer, minibatch, out_features): 
         if layer.training: 
             minibatch = minibatch.data.transpose(0,1).contiguous()
@@ -480,7 +494,7 @@ class DualBatchNorm2d():
             nu = nu.view(nu.size(0), nu.size(1), -1)
             return -nu.matmul(d)
 
-class DualSequential(): 
+class Identity(nn.Module): 
     def affine(self, *xs): 
         return xs[-1]
 
@@ -517,15 +531,11 @@ def select_layer(layer, dual_net, X, l1_proj, l1_type, in_f, out_f, dense_ti, zs
         zl, zu = zip(*[l.fval() for l in dual_net])
         zl, zu = sum(zl), sum(zu)
 
-        d = (zl >= 0).detach().type_as(X)
         I = ((zu > 0).detach() * (zl < 0).detach())
-        if I.sum().item() > 0:
-            d[I] += zu[I]/(zu[I] - zl[I])
-
         if l1_proj is not None and l1_type=='median' and I.sum().item() > l1_proj:
-            return DualReLUProj(I, d, zl, l1_proj)
+            return DualReLUProj(zl, zu, l1_proj)
         else:
-            return DualReLU(I, d, zl)
+            return DualReLU(zl, zu)
 
     elif 'Flatten' in (str(layer.__class__.__name__)): 
         return DualReshape(in_f, out_f)
