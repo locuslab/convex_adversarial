@@ -49,57 +49,6 @@ The package contains the following functions:
     objective vector c. This corresponds to computing objective of Theorem 1 in
     the paper (Equation 5). 
 
-### Residual networks / skip connections
-
-To create sequential PyTorch modules with skip connections, we provide a
-generalization of the PyTorch module `nn.Sequential`. Specifically, we have a
-`DenseSequential` module that is identical to `nn.Sequential` but also takes
-in `Dense' modules. The `Dense' modules consist of `m` layers, and applies
-these `m` layers to the last `m` outputs of the network. 
-
-As an example, the
-following is a simple two layer network with a single skip connection. 
-The first layer is identical to a normal `nn.Conv2d` layer. The second layer has
-a skip connection from the layer with 16 filters and also a normal convolutional
-layer from the previous layer with 32 filters. 
-
-```python
-residual_block = DenseSequential([
-    Dense(nn.Conv2d(16,32,...)),
-    nn.ReLU(), 
-    Dense(nn.Conv2d(16,32,...), None, nn.Conv2d(32,32,...))
-])
-```
-
-### Dual operations
-The package currently has dual operators for the following constrained input
-spaces and layers. These are defined in `dual_inputs.py` and `dual_layers.py`. 
-
-#### Dual input spaces
-+ `InfBall` : L-infinity ball constraint on the input
-+ `InfBallBounded` : L-infinity ball constraint on the input, with additional
-bounding box constraints (works for [0,1] box constraints). 
-+ `InfBallProj` : L-infinity ball constraint using Cauchy random projections
-+ `InfBallProjBounded` : L-infinity ball constraint using Cauchy random
-projections, with additional bounding box constraints (works for [0,1] box
-constraints)
-
-#### Dual layers
-+ `DualLinear` : linear, fully connected layers
-+ `DualConv2d` : 2d convolutional layers
-+ `DualReshape` : reshaping layers, e.g. flattening dimensions
-+ `DualReLU` : ReLU activations
-+ `DualReLUProj` : ReLU activations using Cauchy random projections
-+ `DualDense` : Dense layers, for skip connections
-+ `DualBatchNorm2d` : 2d batch-norm layers, assuming a fixed mean and variance
-+ `Identity` : Identity operator, e.g. for some ResNet skip connections
-
-#### Creating new dual inputs / layers
-Don't see the operator you need here? You can easily construct your own dual
-operators by implementing the abstract base classes in `dual.py`. There is a
-template for dual inputs and for dual layers, and you can add a case for it in
-`select_input` and `select_layer`. You can read more about this below. 
-
 ## Why do we need robust networks? 
 While networks are capable of representing highly complex functions. For
 example, with today's networks it is an easy task to achieve 99% accuracy on
@@ -183,9 +132,33 @@ random projections on residual networks and on the CIFAR10 dataset can be found
 in our [second paper][scalable_paper].
 
 ## Modularity
+
+### Dual operations
+The package currently has dual operators for the following constrained input
+spaces and layers. These are defined in `dual_inputs.py` and `dual_layers.py`. 
+
+#### Dual input spaces
++ `InfBall` : L-infinity ball constraint on the input
++ `InfBallBounded` : L-infinity ball constraint on the input, with additional
+bounding box constraints (works for [0,1] box constraints). 
++ `InfBallProj` : L-infinity ball constraint using Cauchy random projections
++ `InfBallProjBounded` : L-infinity ball constraint using Cauchy random
+projections, with additional bounding box constraints (works for [0,1] box
+constraints)
+
+#### Dual layers
++ `DualLinear` : linear, fully connected layers
++ `DualConv2d` : 2d convolutional layers
++ `DualReshape` : reshaping layers, e.g. flattening dimensions
++ `DualReLU` : ReLU activations
++ `DualReLUProj` : ReLU activations using Cauchy random projections
++ `DualDense` : Dense layers, for skip connections
++ `DualBatchNorm2d` : 2d batch-norm layers, assuming a fixed mean and variance
++ `Identity` : Identity operator, e.g. for some ResNet skip connections
+
 Due to the modularity of the implementation, it is easy to extend the
-methodology to additional dual layers. A dual layer can be implemented by
-filling in the following signature: 
+methodology to additional dual layers. A dual input or dual layer can be
+implemented by filling in the following signature: 
 
 ```python
 class DualObject(nn.Module, metaclass=ABCMeta): 
@@ -232,6 +205,28 @@ class DualLayer(DualObject):
         """ Given previous inputs, apply the transposed affine layer 
         (backward pass) """
         raise NotImplementedError
+```
+
+## Residual networks / skip connections
+
+To create sequential PyTorch modules with skip connections, we provide a
+generalization of the PyTorch module `nn.Sequential`. Specifically, we have a
+`DenseSequential` module that is identical to `nn.Sequential` but also takes
+in `Dense' modules. The `Dense' modules consist of `m` layers, and applies
+these `m` layers to the last `m` outputs of the network. 
+
+As an example, the
+following is a simple two layer network with a single skip connection. 
+The first layer is identical to a normal `nn.Conv2d` layer. The second layer has
+a skip connection from the layer with 16 filters and also a normal convolutional
+layer from the previous layer with 32 filters. 
+
+```python
+residual_block = DenseSequential([
+    Dense(nn.Conv2d(16,32,...)),
+    nn.ReLU(), 
+    Dense(nn.Conv2d(16,32,...), None, nn.Conv2d(32,32,...))
+])
 ```
 
 ## What is in this repository? 
