@@ -325,7 +325,10 @@ class DualReLU(nn.Module):
     def affine(self, *xs, I_ind=None): 
         x = xs[-1]
 
-        d = self.d.cuda(device=x.get_device())
+        if self.d.is_cuda:
+            d = self.d.cuda(device=x.get_device())
+        else:
+            d = self.d
         if x.dim() > d.dim():
             d = d.unsqueeze(1)
 
