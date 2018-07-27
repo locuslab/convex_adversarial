@@ -237,6 +237,7 @@ class DualReLU(DualLayer):
 
 class DualReLUProj(DualReLU): 
     def __init__(self, zl, zu, k): 
+        DualLayer.__init__(self)
         d = (zl >= 0).detach().type_as(zl)
         I = ((zu > 0).detach() * (zl < 0).detach())
         if I.sum().item() > 0:

@@ -3,14 +3,14 @@ import torch.nn as nn
 from abc import ABCMeta, abstractmethod
 
 class DualObject(nn.Module, metaclass=ABCMeta): 
-    @abstractmethod
     def __init__(self): 
         """ Initialize a dual layer by initializing the variables needed to
         compute this layer's contribution to the upper and lower bounds. 
 
         In the paper, if this object is at layer i, this is initializing `h'
         with the required cached values when nu[i]=I and nu[i]=-I. 
-        """pass
+        """
+        super(DualObject, self).__init__()
 
     @abstractmethod
     def apply(self, dual_layer):
