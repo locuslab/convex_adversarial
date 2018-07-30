@@ -87,7 +87,7 @@ class InfBallBounded(DualObject):
 
 class InfBallProj(InfBall):
     def __init__(self, X, epsilon, k): 
-        super(InfBallProj, self).__init__()
+        DualObject.__init__(self)
         self.epsilon = epsilon
 
         n = X[0].numel()
