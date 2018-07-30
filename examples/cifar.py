@@ -113,7 +113,7 @@ if __name__ == "__main__":
                                 clip_grad=1, **kwargs)
                 err = evaluate_robust_cascade(test_loader, model,
                    args.epsilon, t, test_log, args.verbose,
-                   l1_type=args.l1_test, bounded_input=False, clip_grad=1,
+                   l1_type=args.l1_test, bounded_input=False, 
                    **kwargs)
 
             # robust training
@@ -124,7 +124,7 @@ if __name__ == "__main__":
                    **kwargs)
                 err = evaluate_robust(test_loader, model[0], args.epsilon, t,
                    test_log, args.verbose, args.real_time,
-                   l1_type=args.l1_test, bounded_input=False, clip_grad=1,
+                   l1_type=args.l1_test, bounded_input=False, 
                    **kwargs)
             
             if err < best_err: 

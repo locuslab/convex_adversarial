@@ -45,7 +45,7 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
 
 
         if clip_grad: 
-            nn.utils.clip_grad_norm(model.parameters(), clip_grad)
+            nn.utils.clip_grad_norm_(model.parameters(), clip_grad)
 
         opt.step()
 
