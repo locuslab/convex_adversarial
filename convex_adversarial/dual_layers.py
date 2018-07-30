@@ -3,10 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .dual import DualLayer
-from .utils import full_bias
+from .utils import full_bias, Dense
 
-
-def select_layer(layer, dual_net, X, l1_proj, l1_type, in_f, out_f, dense_ti, zsi):
+def select_layer(layer, dual_net, X, l1_proj, l1_type, in_f, out_f, zsi):
     if isinstance(layer, nn.Linear): 
         return DualLinear(layer, out_f)
     elif isinstance(layer, nn.Conv2d): 
@@ -24,8 +23,7 @@ def select_layer(layer, dual_net, X, l1_proj, l1_type, in_f, out_f, dense_ti, zs
     elif 'Flatten' in (str(layer.__class__.__name__)): 
         return DualReshape(in_f, out_f)
     elif isinstance(layer, Dense): 
-        assert isinstance(dense_ti, Dense)
-        return DualDense(layer, dense_ti, dual_net, out_f)
+        return DualDense(layer, dual_net, out_f)
     elif isinstance(layer, nn.BatchNorm2d):
         return DualBatchNorm2d(layer, zsi, out_f)
     else:
@@ -293,7 +291,7 @@ class DualReLUProj(DualReLU):
         return zl,zu
 
 class DualDense(DualLayer): 
-    def __init__(self, dense, dense_t, net, out_features): 
+    def __init__(self, dense, net, out_features): 
         super(DualDense, self).__init__()
         self.duals = nn.ModuleList([])
         for i,W in enumerate(dense.Ws): 

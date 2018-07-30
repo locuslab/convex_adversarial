@@ -12,7 +12,8 @@ import warnings
 
 class DualNetwork(nn.Module):   
     def __init__(self, net, X, epsilon, 
-                 l1_proj=None, l1_type='exact', bounded_input=False):
+                 l1_proj=None, l1_type='exact', bounded_input=False, 
+                 data_parallel=True):
         """ 
         This class creates the dual network. 
 
@@ -40,19 +41,14 @@ class DualNetwork(nn.Module):
                     zs.append(l(*zs))
                 else:
                     zs.append(l(zs[-1]))
-                    nf.append(zs[-1].size())
+                nf.append(zs[-1].size())
 
 
         # Use the bounded boxes
         dual_net = [select_input(X, epsilon, l1_proj, l1_type, bounded_input)]
 
-        if any(isinstance(l, Dense) for l in net): 
-            dense_t = transpose_all(net)
-        else: 
-            dense_t = [None]*len(net)
-
         for i,(in_f,out_f,layer) in enumerate(zip(nf[:-1], nf[1:], net)): 
-            dual_layer = select_layer(layer, dual_net, X, l1_proj, l1_type, in_f, out_f, dense_t[i], zs[i])
+            dual_layer = select_layer(layer, dual_net, X, l1_proj, l1_type, in_f, out_f, zs[i])
 
             # skip last layer
             if i < len(net)-1: 
