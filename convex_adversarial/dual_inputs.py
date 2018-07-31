@@ -30,15 +30,22 @@ class InfBall(DualObject):
         self.nu_x.append(dual_layer(*self.nu_x))
         self.nu_1.append(dual_layer(*self.nu_1))
 
-    def bounds(self): 
+    def bounds(self, network=None): 
+        if network is None: 
+            nu_1 = self.nu_1[-1]
+            nu_x = self.nu_x[-1]
+        else:
+            nu_1 = network(self.nu_1[0])
+            nu_x = network(self.nu_x[0])
+
         epsilon = self.epsilon
-        l1 = self.nu_1[-1].abs().sum(1)
+        l1 = nu_1.abs().sum(1)
         if isinstance(epsilon, torch.Tensor): 
-            while epsilon.dim() < self.nu_x[-1].dim(): 
+            while epsilon.dim() < nu_x.dim(): 
                 epsilon = epsilon.unsqueeze(1)
 
-        return (self.nu_x[-1] - epsilon*l1, 
-                self.nu_x[-1] + epsilon*l1)
+        return (nu_x - epsilon*l1, 
+                nu_x + epsilon*l1)
 
     def objective(self, *nus): 
         epsilon = self.epsilon
@@ -68,8 +75,11 @@ class InfBallBounded(DualObject):
         self.nu_x.append(dual_layer(*self.nu_x))
         self.nu_1.append(dual_layer(*self.nu_1))
 
-    def bounds(self): 
-        nu = self.nu_1[-1]
+    def bounds(self, network=None): 
+        if network is None: 
+            nu = self.nu_1[-1]
+        else:
+            nu = network(self.nu_1[0])
         nu_pos = nu.clamp(min=0).view(nu.size(0), nu.size(1), -1)
         nu_neg = nu.clamp(max=0).view(nu.size(0), nu.size(1), -1)
 
@@ -98,7 +108,14 @@ class InfBallProj(InfBall):
         self.nu_x.append(dual_layer(*self.nu_x))
         self.nu.append(dual_layer(*self.nu))
 
-    def bounds(self): 
+    def bounds(self, network=None):
+        if network is None: 
+            nu = self.nu[-1]
+            nu_x = self.nu_x[-1]
+        else: 
+            nu = network(self.nu[0])
+            nu_x = network(self.nu_x[0])
+
         l1 = torch.median(self.nu[-1].abs(), 1)[0]
         return (self.nu_x[-1] - self.epsilon*l1, 
                 self.nu_x[-1] + self.epsilon*l1)
@@ -125,14 +142,25 @@ class InfBallProjBounded(InfBallProj):
         self.nu_u.append(dual_layer(*self.nu_u))
         self.nu_one_u.append(dual_layer(*self.nu_one_u))
 
-    def bounds(self): 
-        nu_l1_u = torch.median(self.nu_u[-1].abs(),1)[0]
-        nu_pos_u = (nu_l1_u + self.nu_one_u[-1])/2
-        nu_neg_u = (-nu_l1_u + self.nu_one_u[-1])/2
+    def bounds(self, network=None): 
+        if network is None: 
+            nu_u = self.nu_u[-1]
+            nu_one_u = self.nu_one_u[-1]
+            nu_l = self.nu_l[-1]
+            nu_one_l = self.nu_one_l[-1]
+        else: 
+            nu_u = network(self.nu_u[0])
+            nu_one_u = network(self.nu_one_u[0])
+            nu_l = network(self.nu_l[0])
+            nu_one_l = network(self.nu_one_l[0])
 
-        nu_l1_l = torch.median(self.nu_l[-1].abs(),1)[0]
-        nu_pos_l = (nu_l1_l + self.nu_one_l[-1])/2
-        nu_neg_l = (-nu_l1_l + self.nu_one_l[-1])/2
+        nu_l1_u = torch.median(nu_u.abs(),1)[0]
+        nu_pos_u = (nu_l1_u + nu_one_u)/2
+        nu_neg_u = (-nu_l1_u + nu_one_u)/2
+
+        nu_l1_l = torch.median(nu_l.abs(),1)[0]
+        nu_pos_l = (nu_l1_l + nu_one_l)/2
+        nu_neg_l = (-nu_l1_l + nu_one_l)/2
 
         zu = nu_pos_u + nu_neg_l
         zl = nu_neg_u + nu_pos_l
