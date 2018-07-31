@@ -105,7 +105,7 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose,
             robust_ce, robust_err = robust_loss_parallel(model, epsilon, X, y,
                **kwargs)
         else:
-                robust_ce, robust_err = robust_loss(model, epsilon, X, y, **kwargs)
+            robust_ce, robust_err = robust_loss(model, epsilon, X, y, **kwargs)
 
 
         out = model(Variable(X))
