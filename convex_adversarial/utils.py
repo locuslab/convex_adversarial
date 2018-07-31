@@ -1,28 +1,6 @@
 import torch.nn as nn
 
 ###########################################
-# Helper function to transpose all layers #
-###########################################
-
-def transpose_all(ls): 
-    transposed = [[] if isinstance(l,Dense) else None for l in ls]
-    for i,l in enumerate(ls): 
-        if not isinstance(l,Dense): 
-            continue
-        for j,W in enumerate(l.Ws):
-            k = i+j - (len(l.Ws) - 1)
-            if W is not None: 
-                while len(transposed[k]) < len(l.Ws) - (j+1): 
-                    transposed[k].append(None)
-                transposed[k].append(toAffineTranspose(W))
-    layers = [Dense() if isinstance(l,Dense) else l for l in ls]
-    for l,t in zip(layers, transposed): 
-        if isinstance(l,Dense): 
-            for t0 in reversed(t): 
-                l.Ws.append(t0)
-    return layers
-
-###########################################
 # Helper function to extract fully        #
 # shaped bias terms                       #
 ###########################################
@@ -38,9 +16,9 @@ def full_bias(l, n=None):
         b = l.bias.unsqueeze(1).unsqueeze(2)
         if isinstance(n, int): 
             k = int((n/(b.numel()))**0.5)
-            return b.expand(b.numel(),k,k).contiguous().view(1,-1)
+            return b.expand(1,b.numel(),k,k).contiguous().view(1,-1)
         else: 
-            return b.expand(*n)
+            return b.expand(1,*n)
     elif isinstance(l, Dense): 
         return sum(full_bias(layer, n=n) for layer in l.Ws if layer is not None)
     elif isinstance(l, nn.Sequential) and len(l) == 0: 
