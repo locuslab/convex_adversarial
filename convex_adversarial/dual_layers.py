@@ -61,10 +61,12 @@ class DualLinear(DualLayer):
             return 0,0
         else: 
             if network is None: 
-                return self.bias[-1], self.bias[-1]
+                b = self.bias[-1]
             else:
                 b = network(self.bias[0])
-                return b,b
+            if b is None:
+                return 0,0
+            return b,b
 
     def objective(self, *nus): 
         if self.bias is None: 
@@ -76,6 +78,8 @@ class DualLinear(DualLayer):
 
     def forward(self, *xs): 
         x = xs[-1]
+        if x is None: 
+            return None
         return F.linear(x, self.layer.weight)
 
     def T(self, *xs): 
@@ -206,6 +210,8 @@ class DualReLU(DualLayer):
             nu = self.nus[-1]
         else:
             nu = network(self.nus[0])
+        if nu is None: 
+            return 0,0
         size = nu.size()
         nu = nu.view(nu.size(0), -1)
         zlI = self.zl[self.I]
@@ -229,6 +235,8 @@ class DualReLU(DualLayer):
 
     def forward(self, *xs, I_ind=None): 
         x = xs[-1]
+        if x is None:
+            return None
 
         if self.d.is_cuda:
             d = self.d.cuda(device=x.get_device())
@@ -338,12 +346,17 @@ class DualDense(DualLayer):
 
     def forward(self, *xs): 
         duals = list(self.duals)[-min(len(xs),len(self.duals)):]
-        return sum(W(*xs[:i+1]) 
+        if all(W is None for W in duals): 
+            return None
+        out = [W(*xs[:i+1]) 
             for i,W in zip(range(-len(duals) + len(xs), len(xs)),
-                duals) if W is not None)
+                duals) if W is not None]
+        return sum(o for o in out if o is not None)
 
     def T(self, *xs): 
         dual_ts = list(self.dual_ts)[-min(len(xs),len(self.dual_ts)):]
+        if all(W is None for W in dual_ts): 
+            return None
         return sum(W.T(*xs[:i+1]) 
             for i,W in zip(range(-len(dual_ts) + len(xs), len(xs)),
                 dual_ts) if W is not None)
