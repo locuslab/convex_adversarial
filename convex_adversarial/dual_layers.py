@@ -84,6 +84,8 @@ class DualLinear(DualLayer):
 
     def T(self, *xs): 
         x = xs[-1]
+        if x is None:
+            return None
         return F.linear(x, self.layer.weight.t())
 
 # Convolutional helper functions to minibatch large inputs for CuDNN
@@ -119,6 +121,8 @@ class DualConv2d(DualLinear):
 
     def forward(self, *xs): 
         x = xs[-1]
+        if x is None: 
+            return None
         if xs[-1].dim() == 5:  
             n = x.size(0)
             x = unbatch(x)
@@ -131,6 +135,8 @@ class DualConv2d(DualLinear):
 
     def T(self, *xs): 
         x = xs[-1]
+        if x is None:
+            return None
         if xs[-1].dim() == 5:  
             n = x.size(0)
             x = unbatch(x)
@@ -149,11 +155,15 @@ class DualReshape(DualLayer):
 
     def forward(self, *xs): 
         x = xs[-1]
+        if x is None: 
+            return None
         shape = x.size()[:-len(self.in_f)] + self.out_f
         return x.view(shape)
 
     def T(self, *xs): 
         x = xs[-1]
+        if x is None: 
+            return None
         shape = x.size()[:-len(self.out_f)] + self.in_f
         return x.view(shape)
 
@@ -348,18 +358,40 @@ class DualDense(DualLayer):
         duals = list(self.duals)[-min(len(xs),len(self.duals)):]
         if all(W is None for W in duals): 
             return None
+        # recursively apply the dense sub-layers
         out = [W(*xs[:i+1]) 
             for i,W in zip(range(-len(duals) + len(xs), len(xs)),
                 duals) if W is not None]
+        
+        # remove the non applicable outputs
+        out = [o for o in out if o is not None]
+
+        # if no applicable outputs, return None
+        if len(out) == 0: 
+            return None
+
+        # otherwise, return the sum of the outputs
         return sum(o for o in out if o is not None)
 
     def T(self, *xs): 
         dual_ts = list(self.dual_ts)[-min(len(xs),len(self.dual_ts)):]
         if all(W is None for W in dual_ts): 
             return None
-        return sum(W.T(*xs[:i+1]) 
+
+        # recursively apply the dense sub-layers
+        out = [W.T(*xs[:i+1]) 
             for i,W in zip(range(-len(dual_ts) + len(xs), len(xs)),
-                dual_ts) if W is not None)
+                dual_ts) if W is not None]
+        # remove the non applicable outputs
+        out = [o for o in out if o is not None]
+
+        # if no applicable outputs, return None
+        if len(out) == 0: 
+            return None
+
+        # otherwise, return the sum of the outputs
+        return sum(o for o in out if o is not None)
+
 
     def apply(self, dual_layer): 
         for W in self.duals: 
@@ -400,9 +432,13 @@ class DualBatchNorm2d(DualLayer):
 
     def forward(self, *xs): 
         x = xs[-1]
+        if x is None:
+            return None
         return self.D*x
 
     def T(self, *xs): 
+        if x is None: 
+            return None
         return self(*xs)
 
     def apply(self, dual_layer): 
