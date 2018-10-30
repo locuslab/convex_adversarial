@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from .dual import DualLayer
 from .utils import full_bias, Dense
 
-def select_layer(layer, dual_net, X, l1_proj, l1_type, in_f, out_f, zsi,
+def select_layer(layer, dual_net, X, proj, norm_type, in_f, out_f, zsi,
                  zl=None, zu=None):
     if isinstance(layer, nn.Linear): 
         return DualLinear(layer, out_f)
@@ -14,15 +14,12 @@ def select_layer(layer, dual_net, X, l1_proj, l1_type, in_f, out_f, zsi,
     elif isinstance(layer, nn.ReLU):   
         if zl is None and zu is None:
             zl, zu = zip(*[l.bounds() for l in dual_net])
-            # for l,dn in zip(zl,dual_net):
-            #     print(dn, l.size())
             zl, zu = sum(zl), sum(zu)
         if zl is None or zu is None: 
             raise ValueError("Must either provide both l,u bounds or neither.")
-
         I = ((zu > 0).detach() * (zl < 0).detach())
-        if l1_proj is not None and l1_type=='median' and I.sum().item() > l1_proj:
-            return DualReLUProj(zl, zu, l1_proj)
+        if proj is not None and (norm_type=='l1_median' or norm_type=='l2_normal') and I.sum().item() > proj:
+            return DualReLUProj(zl, zu, proj)
         else:
             return DualReLU(zl, zu)
 
@@ -315,7 +312,7 @@ class DualReLUProj(DualReLU):
             nu = network(self.nus[0])
             no = network(self.nu_ones[0])
 
-        n = torch.median(self.nus[-1].abs(), 1)[0]
+        n = torch.median(nu.abs(), 1)[0]
 
         # From notes: 
         # \sum_i l_i[nu_i]_+ \approx (-n + no)/2

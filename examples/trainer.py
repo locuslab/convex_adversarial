@@ -101,12 +101,7 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose,
         if y.dim() == 2: 
             y = y.squeeze(1)
 
-        if parallel: 
-            robust_ce, robust_err = robust_loss_parallel(model, epsilon, X, y,
-               **kwargs)
-        else:
-            robust_ce, robust_err = robust_loss(model, epsilon, X, y, **kwargs)
-
+        robust_ce, robust_err = robust_loss(model, epsilon, X, y, **kwargs)
 
         out = model(Variable(X))
         ce = nn.CrossEntropyLoss()(out, Variable(y))
@@ -347,13 +342,20 @@ def robust_loss_cascade(models, epsilon, X, y, **kwargs):
 
     I = torch.arange(X.size(0)).type_as(y.data)
 
+    if X.size(0) == 1: 
+        rl = robust_loss_parallel
+    else:
+        rl = robust_loss
+
     for j,model in enumerate(models[:-1]): 
 
         out = model(X)
         ce = nn.CrossEntropyLoss(reduce=False)(out, y)
-        _, uncertified = robust_loss(model, epsilon, X,
+
+        _, uncertified = rl(model, epsilon, X,
                                      out.max(1)[1],
                                      size_average=False, **kwargs)
+
         certified = ~uncertified
         l = []
         if certified.sum() == 0: 
@@ -366,7 +368,7 @@ def robust_loss_cascade(models, epsilon, X, y, **kwargs):
             ce = ce[Variable(certified.nonzero()[:,0])]
             out = out[Variable(certified.nonzero()[:,0])]
             err = (out.data.max(1)[1] != y_cert.data).float()
-            robust_ce, robust_err = robust_loss(model, epsilon, 
+            robust_ce, robust_err = rl(model, epsilon, 
                                                  X_cert, 
                                                  y_cert, 
                                                  size_average=False,
@@ -394,7 +396,7 @@ def robust_loss_cascade(models, epsilon, X, y, **kwargs):
     ce = nn.CrossEntropyLoss(reduce=False)(out, y)
     err = (out.data.max(1)[1] != y.data).float()
 
-    robust_ce, robust_err = robust_loss(models[-1], epsilon, X, y,
+    robust_ce, robust_err = rl(models[-1], epsilon, X, y,
                                          size_average=False, **kwargs)
 
     # update statistics with the remaining model and take the average 
@@ -408,7 +410,7 @@ def robust_loss_cascade(models, epsilon, X, y, **kwargs):
     robust_err = total_robust_err.item()/batch_size
     err = total_err.item()/batch_size
 
-    _, uncertified = robust_loss(models[-1], epsilon, 
+    _, uncertified = rl(models[-1], epsilon, 
                                  X, 
                                  out.max(1)[1], 
                                  size_average=False,
@@ -420,10 +422,10 @@ def robust_loss_cascade(models, epsilon, X, y, **kwargs):
 
     return robust_ce, robust_err, ce, err, I
 
-def sampler_robust_cascade(loader, models, epsilon, **kwargs): 
+def sampler_robust_cascade(loader, models, epsilon, batch_size, **kwargs): 
     torch.set_grad_enabled(False)
     dataset = loader.dataset 
-    loader = torch.utils.data.DataLoader(dataset, batch_size=loader.batch_size, shuffle=False, pin_memory=True)
+    loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, pin_memory=True)
 
     l = []
 
@@ -470,7 +472,6 @@ def evaluate_robust_cascade(loader, models, epsilon, epoch, log, verbose, **kwar
         X,y = X.cuda(), y.cuda().long()
         if y.dim() == 2: 
             y = y.squeeze(1)
-
         robust_ce, robust_err, ce, err, _ = robust_loss_cascade(models, 
                                                              epsilon, 
                                                              Variable(X), 

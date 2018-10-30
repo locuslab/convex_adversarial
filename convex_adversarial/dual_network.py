@@ -12,9 +12,9 @@ import warnings
 
 class DualNetwork(nn.Module):   
     def __init__(self, net, X, epsilon, 
-                 l1_proj=None, l1_type='exact', bounded_input=False, 
+                 proj=None, norm_type='l1', bounded_input=False, 
                  data_parallel=True):
-        """ 
+        """  
         This class creates the dual network. 
 
         net : ReLU network
@@ -45,10 +45,11 @@ class DualNetwork(nn.Module):
 
 
         # Use the bounded boxes
-        dual_net = [select_input(X, epsilon, l1_proj, l1_type, bounded_input)]
+        dual_net = [select_input(X, epsilon, proj, norm_type, bounded_input)]
 
         for i,(in_f,out_f,layer) in enumerate(zip(nf[:-1], nf[1:], net)): 
-            dual_layer = select_layer(layer, dual_net, X, l1_proj, l1_type, in_f, out_f, zs[i])
+            dual_layer = select_layer(layer, dual_net, X, proj, norm_type,
+                                      in_f, out_f, zs[i])
 
             # skip last layer
             if i < len(net)-1: 
@@ -120,15 +121,19 @@ class InputSequential(nn.Sequential):
 
     def forward(self, input): 
         """ Helper class to apply a sequential model starting at the ith layer """
+        xs = [input]
         for j,module in enumerate(self._modules.values()): 
             if j >= self.i: 
-                input = module(input)
-        return input
+                if 'Dense' in type(module).__name__:
+                    xs.append(module(*xs))
+                else:
+                    xs.append(module(xs[-1]))
+        return xs[-1]
 
 
 # Data parallel versions of the loss calculation
-def robust_loss_parallel(net, epsilon, X, y, l1_proj=None, 
-                 l1_type='exact', bounded_input=False, size_average=True): 
+def robust_loss_parallel(net, epsilon, X, y, proj=None, 
+                 norm_type='l1', bounded_input=False, size_average=True): 
     if any('BatchNorm2d' in str(l.__class__.__name__) for l in net): 
         raise NotImplementedError
     if bounded_input: 
@@ -146,7 +151,7 @@ def robust_loss_parallel(net, epsilon, X, y, l1_proj=None,
             zs.append(l(zs[-1]))
         nf.append(zs[-1].size())
 
-    dual_net = [select_input(X, epsilon, l1_proj, l1_type, bounded_input)]
+    dual_net = [select_input(X, epsilon, proj, norm_type, bounded_input)]
 
     for i,(in_f,out_f,layer) in enumerate(zip(nf[:-1], nf[1:], net)): 
         if isinstance(layer, nn.ReLU): 
@@ -160,10 +165,10 @@ def robust_loss_parallel(net, epsilon, X, y, l1_proj=None,
                 zl += out[0]
                 zu += out[1]
 
-            dual_layer = select_layer(layer, dual_net, X, l1_proj, l1_type,
+            dual_layer = select_layer(layer, dual_net, X, proj, norm_type,
                 in_f, out_f, zs[i], zl=zl, zu=zu)
         else:
-            dual_layer = select_layer(layer, dual_net, X, l1_proj, l1_type,
+            dual_layer = select_layer(layer, dual_net, X, proj, norm_type,
                 in_f, out_f, zs[i])
         
         dual_net.append(dual_layer)

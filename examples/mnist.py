@@ -45,7 +45,8 @@ if __name__ == "__main__":
     train_log = open(args.prefix + "_train.log", "w")
     test_log = open(args.prefix + "_test.log", "w")
 
-    train_loader, test_loader = pblm.mnist_loaders(args.batch_size)
+    train_loader, _ = pblm.mnist_loaders(args.batch_size)
+    _, test_loader = pblm.mnist_loaders(args.test_batch_size)
 
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
@@ -62,7 +63,9 @@ if __name__ == "__main__":
         if _ > 0: 
             # reduce dataset to just uncertified examples
             print("Reducing dataset...")
-            train_loader = sampler_robust_cascade(train_loader, model, args.epsilon, **kwargs)
+            train_loader = sampler_robust_cascade(train_loader, model, args.epsilon,
+                                                  args.test_batch_size, 
+                                                  norm_type=args.norm_test, bounded_input=True, **kwargs)
             if train_loader is None: 
                 print('No more examples, terminating')
                 break
@@ -110,20 +113,20 @@ if __name__ == "__main__":
             elif args.cascade > 1: 
                 train_robust(train_loader, model[-1], opt, epsilon, t,
                                 train_log, args.verbose, args.real_time,
-                                l1_type=args.l1_train, bounded_input=True,
+                                norm_type=args.norm_train, bounded_input=True,
                                 **kwargs)
                 err = evaluate_robust_cascade(test_loader, model,
                    args.epsilon, t, test_log, args.verbose,
-                   l1_type=args.l1_test, bounded_input=True,  **kwargs)
+                   norm_type=args.norm_test, bounded_input=True,  **kwargs)
 
             # robust training
             else:
                 train_robust(train_loader, model[0], opt, epsilon, t,
                    train_log, args.verbose, args.real_time,
-                   l1_type=args.l1_train, bounded_input=True, **kwargs)
+                   norm_type=args.norm_train, bounded_input=True, **kwargs)
                 err = evaluate_robust(test_loader, model[0], args.epsilon,
                    t, test_log, args.verbose, args.real_time,
-                   l1_type=args.l1_test, bounded_input=True, **kwargs)
+                   norm_type=args.norm_test, bounded_input=True, **kwargs)
             
             if err < best_err: 
                 best_err = err

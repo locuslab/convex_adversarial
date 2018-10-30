@@ -302,8 +302,8 @@ def cifar_model_resnet(N = 5, factor=10):
 
 def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3, 
               epsilon=0.1, starting_epsilon=None, 
-              l1_proj=None, delta=None, m=1, l1_eps=None, 
-              l1_train='exact', l1_test='exact', 
+              proj=None, 
+              norm_train='l1', norm_test='l1', 
               opt='sgd', momentum=0.9, weight_decay=5e-4): 
 
     parser = argparse.ArgumentParser()
@@ -313,6 +313,7 @@ def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3,
     parser.add_argument('--momentum', type=float, default=momentum)
     parser.add_argument('--weight_decay', type=float, default=weight_decay)
     parser.add_argument('--batch_size', type=int, default=batch_size)
+    parser.add_argument('--test_batch_size', type=int, default=batch_size)
     parser.add_argument('--epochs', type=int, default=epochs)
     parser.add_argument("--lr", type=float, default=lr)
 
@@ -322,12 +323,9 @@ def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3,
     parser.add_argument('--schedule_length', type=int, default=10)
 
     # projection settings
-    parser.add_argument('--l1_proj', type=int, default=l1_proj)
-    parser.add_argument('--delta', type=float, default=delta)
-    parser.add_argument('--m', type=int, default=m)
-    parser.add_argument('--l1_train', default=l1_train)
-    parser.add_argument('--l1_test', default=l1_test)
-    parser.add_argument('--l1_eps', type=float, default=l1_eps)
+    parser.add_argument('--proj', type=int, default=proj)
+    parser.add_argument('--norm_train', default=norm_train)
+    parser.add_argument('--norm_test', default=norm_test)
 
     # model arguments
     parser.add_argument('--model', default=None)
@@ -336,6 +334,7 @@ def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3,
     parser.add_argument('--method', default=None)
     parser.add_argument('--resnet_N', type=int, default=1)
     parser.add_argument('--resnet_factor', type=int, default=1)
+
 
     # other arguments
     parser.add_argument('--prefix')
@@ -358,17 +357,15 @@ def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3,
 
         banned = ['verbose', 'prefix',
                   'resume', 'baseline', 'eval', 
-                  'method', 'model', 'cuda_ids', 'load']
+                  'method', 'model', 'cuda_ids', 'load', 'real_time', 
+                  'test_batch_size']
         if args.method == 'baseline':
             banned += ['epsilon', 'starting_epsilon', 'schedule_length', 
                        'l1_test', 'l1_train', 'm', 'l1_proj']
 
-        # if not using adam, ignore momentum and weight decay
-        if args.opt == 'adam': 
-            banned += ['momentum', 'weight_decay']
+        # Ignore these parameters for filename since we never change them
+        banned += ['momentum', 'weight_decay']
 
-        if args.m == 1: 
-            banned += ['m']
         if args.cascade == 1: 
             banned += ['cascade']
 
@@ -377,8 +374,8 @@ def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3,
         if args.model not in ['wide', 'deep']: 
             banned += ['model_factor']
 
-        if args.model != 'resnet': 
-            banned += ['resnet_N', 'resnet_factor']
+        # if args.model != 'resnet': 
+        banned += ['resnet_N', 'resnet_factor']
 
         for arg in sorted(vars(args)): 
             if arg not in banned and getattr(args,arg) is not None: 
@@ -399,26 +396,42 @@ def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3,
 
 def args2kwargs(args, X=None): 
 
-    if args.l1_proj is not None: 
-        if not args.l1_eps:
-            if args.delta: 
-                args.l1_eps = epsilon_from_model(model, Variable(X.cuda()), args.l1_proj,
-                                            args.delta, args.m)
-                print('''
-        With probability {} and projection into {} dimensions and a max
-        over {} estimates, we have epsilon={}'''.format(args.delta, args.l1_proj,
-                                                        args.m, args.l1_eps))
-            else: 
-                args.l1_eps = 0
-                print('No epsilon or \delta specified, using epsilon=0.')
-        else:
-            print('Specified l1_epsilon={}'.format(args.l1_eps))
+    if args.proj is not None: 
         kwargs = {
-            'l1_proj' : args.l1_proj, 
-            # 'l1_eps' : args.l1_eps, 
-            # 'm' : args.m
+            'proj' : args.proj, 
         }
     else:
         kwargs = {
         }
+    kwargs['parallel'] = (args.cuda_ids is not None)
     return kwargs
+
+
+
+def argparser_evaluate(epsilon=0.1, norm='l1'): 
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--epsilon", type=float, default=epsilon)
+    parser.add_argument('--proj', type=int, default=None)
+    parser.add_argument('--norm', default=norm)
+    parser.add_argument('--model', default=None)
+    parser.add_argument('--dataset', default='mnist')
+
+    parser.add_argument('--load')
+    parser.add_argument('--output')
+
+    parser.add_argument('--real_time', action='store_true')
+    # parser.add_argument('--seed', type=int, default=seed)
+    parser.add_argument('--verbose', type=int, default=True)
+    parser.add_argument('--cuda_ids', default=None)
+
+    
+    args = parser.parse_args()
+
+    if args.cuda_ids is not None: 
+        print('Setting CUDA_VISIBLE_DEVICES to {}'.format(args.cuda_ids))
+        os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda_ids
+
+
+    return args
