@@ -6,6 +6,8 @@
 [scalable_paper]: https://arxiv.org/abs/1805.12514
 
 ## News
++ 10/30/2018 - Version 0.4 released to reflect the NIPS final copy. Added 
+model weights for all models described in the paper. 
 + 7/26/2018 - Version 0.3.3 code refactor
 + 6/2/2018 - Version 0.3.1 released to reflect the new paper. 
 + 5/31/2018 - New paper on a scalable version for models with skip connections
@@ -145,6 +147,8 @@ bounding box constraints (works for [0,1] box constraints).
 + `InfBallProjBounded` : L-infinity ball constraint using Cauchy random
 projections, with additional bounding box constraints (works for [0,1] box
 constraints)
++ `L2Ball` : L-2 ball constraint on the input
++ `L2BallProj` : L-2 ball constraint using Normal random projections
 
 #### Dual layers
 + `DualLinear` : linear, fully connected layers
