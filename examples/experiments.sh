@@ -17,8 +17,10 @@ epochs=60
 schedule_length=20
 
 # L2 ball arguments
-norm_type=l2_normal
-norm_eval=l2
+norm_type=l1_median
+norm_eval=l1
+# norm_type=l2_normal
+# norm_eval=l2
 
 # MNIST parameters
 prefix="tmp/mnist"
@@ -33,7 +35,7 @@ eps=0.1
 # eps=1.58
 
 # small, exact 
-# python examples/mnist.py --epsilon 1.58 --norm_train ${norm_eval} --norm_test ${norm_eval} ${parameters}
+python examples/mnist.py --epsilon ${eps} --norm_train ${norm_eval} --norm_test ${norm_eval} ${parameters}
 
 # all remaining experiments use an approximation for training with 50 projections
 parameters="--proj 50 --norm_train ${norm_type} ${parameters}"
