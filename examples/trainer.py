@@ -267,12 +267,12 @@ def train_madry(loader, model, epsilon, opt, epoch, log, verbose):
 
         batch_time.update(time.time()-end)
         end = time.time()
-        losses.update(ce.data[0], X.size(0))
+        losses.update(ce.item(), X.size(0))
         errors.update(err, X.size(0))
-        plosses.update(pce.data[0], X.size(0))
+        plosses.update(pce.item(), X.size(0))
         perrors.update(perr, X.size(0))
 
-        print(epoch, i, ce.data[0], err, file=log)
+        print(epoch, i, ce.item(), err, file=log)
         if verbose and i % verbose == 0: 
             print('Epoch: [{0}][{1}/{2}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
@@ -306,10 +306,10 @@ def evaluate_madry(loader, model, epsilon, epoch, log, verbose):
         _, pgd_err = _pgd(model, Variable(X), Variable(y), epsilon)
 
         # print to logfile
-        print(epoch, i, ce.data[0], err, file=log)
+        print(epoch, i, ce.item(), err, file=log)
 
         # measure accuracy and record loss
-        losses.update(ce.data[0], X.size(0))
+        losses.update(ce.item(), X.size(0))
         errors.update(err, X.size(0))
         perrors.update(pgd_err, X.size(0))
 
@@ -330,6 +330,7 @@ def evaluate_madry(loader, model, epsilon, epoch, log, verbose):
     print(' * PGD error {perror.avg:.3f}\t'
           'Error {error.avg:.3f}'
           .format(error=errors, perror=perrors))
+    return errors.avg
 
 
 def robust_loss_cascade(models, epsilon, X, y, **kwargs): 
