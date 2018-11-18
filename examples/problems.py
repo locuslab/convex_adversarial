@@ -1,3 +1,7 @@
+# a hack to ensure scripts search cwd
+import sys
+sys.path.append('.')
+
 import torch
 from torch.autograd import Variable
 import torch.nn as nn
@@ -74,6 +78,16 @@ def fashion_mnist_loaders(batch_size):
     train_loader = torch.utils.data.DataLoader(mnist_train, batch_size=batch_size, shuffle=True, pin_memory=True)
     test_loader = torch.utils.data.DataLoader(mnist_test, batch_size=batch_size, shuffle=False, pin_memory=True)
     return train_loader, test_loader
+
+def mnist_500(): 
+    model = nn.Sequential(
+        Flatten(),
+        nn.Linear(28*28,500),
+        nn.ReLU(),
+        nn.Linear(500, 10)
+    )
+    return model
+
 
 def mnist_model(): 
     model = nn.Sequential(
