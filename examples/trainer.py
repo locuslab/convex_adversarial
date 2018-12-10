@@ -9,7 +9,7 @@ import numpy as np
 import time
 import gc
 
-from .attacks import _pgd
+from attacks import _pgd
 
 DEBUG = False
 
