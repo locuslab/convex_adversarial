@@ -101,6 +101,7 @@ class RobustBounds(nn.Module):
 
 def robust_loss(net, epsilon, X, y, 
                 size_average=True, device_ids=None, parallel=False, **kwargs):
+    reduction = 'mean' if size_average else 'none'
     if parallel: 
         f = nn.DataParallel(RobustBounds(net, epsilon, **kwargs))(X,y)
     else: 
@@ -108,7 +109,7 @@ def robust_loss(net, epsilon, X, y,
     err = (f.max(1)[1] != y)
     if size_average: 
         err = err.sum().item()/X.size(0)
-    ce_loss = nn.CrossEntropyLoss(reduce=size_average)(f, y)
+    ce_loss = nn.CrossEntropyLoss(reduction=reduction)(f, y)
     return ce_loss, err
 
 class InputSequential(nn.Sequential): 
