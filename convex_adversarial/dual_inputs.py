@@ -3,15 +3,15 @@ import torch.nn as nn
 
 from .dual import DualObject
 
-def select_input(X, epsilon, proj, norm, bounded_input):
+def select_input(X, epsilon, proj, norm, bounded_input, l=0,u=1):
     if proj is not None and norm=='l1_median' and X[0].numel() > proj:
         if bounded_input: 
-            return InfBallProjBounded(X,epsilon,proj)
+            return InfBallProjBounded(X,epsilon,proj, l=l, u=u)
         else: 
             return InfBallProj(X,epsilon,proj)
     elif norm == 'l1':
         if bounded_input: 
-            return InfBallBounded(X, epsilon)
+            return InfBallBounded(X, epsilon, l=l, u=u)
         else:
             return InfBall(X, epsilon)
     elif proj is not None and norm=='l2_normal' and X[0].numel() > proj: 
@@ -61,15 +61,24 @@ class InfBall(DualObject):
         if isinstance(self.epsilon, torch.Tensor): 
             while epsilon.dim() < nu.dim()-1: 
                 epsilon = epsilon.unsqueeze(1)
-        l1 = epsilon*nu.abs().sum(2)
+        l1 = (epsilon*nu.abs()).sum(2)
         return -nu_x - l1
 
 class InfBallBounded(DualObject):
     def __init__(self, X, epsilon, l=0, u=1): 
         super(InfBallBounded, self).__init__()
         self.epsilon = epsilon
-        self.l = (X-epsilon).clamp(min=l).view(X.size(0), 1, -1)
-        self.u = (X+epsilon).clamp(max=u).view(X.size(0), 1, -1)
+        if torch.is_tensor(l): 
+            l_ = torch.max(X-epsilon,l)
+        else: 
+            l_ = (X-epsilon).clamp(min=l)
+        if torch.is_tensor(u): 
+            u_ = torch.min(X+epsilon,u)
+        else: 
+            u_ = (X+epsilon).clamp(max=u)
+
+        self.l = l_.view(X.size(0), 1, -1)
+        self.u = u_.view(X.size(0), 1, -1)
 
         n = X[0].numel()
         self.nu_x = [X] 
