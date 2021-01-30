@@ -85,15 +85,16 @@ class DualNetBounds(DualNetwork):
         return self(c)
 
 class RobustBounds(nn.Module): 
-    def __init__(self, net, epsilon, **kwargs): 
+    def __init__(self, net, epsilon, parallel=False, **kwargs): 
         super(RobustBounds, self).__init__()
         self.net = net
         self.epsilon = epsilon
         self.kwargs = kwargs
+        self.DualNetworkClass = ParallelDualNetwork if parallel else DualNetwork
 
     def forward(self, X,y): 
         num_classes = self.net[-1].out_features
-        dual = DualNetwork(self.net, X, self.epsilon, **self.kwargs)
+        dual = self.DualNetworkClass(self.net, X, self.epsilon, **self.kwargs)
         c = Variable(torch.eye(num_classes).type_as(X)[y].unsqueeze(1) - torch.eye(num_classes).type_as(X).unsqueeze(0))
         if X.is_cuda:
             c = c.cuda()
@@ -134,7 +135,8 @@ class InputSequential(nn.Sequential):
 
 class ParallelDualNetwork(DualNetwork):   
     def __init__(self, net, X, epsilon, 
-                 proj=None, norm_type='l1', bounded_input=False):
+                 proj=None, norm_type='l1', bounded_input=False, 
+                 input_l=0, input_u=1):
         super(DualNetwork, self).__init__()
 
         if any('BatchNorm2d' in str(l.__class__.__name__) for l in net): 
@@ -145,6 +147,7 @@ class ParallelDualNetwork(DualNetwork):
                 'memory.')
         zs = [X[:1]]
         nf = [zs[0].size()]
+
         for l in net: 
             if 'Dense' in type(l).__name__:
                 zs.append(l(*zs))
@@ -152,7 +155,7 @@ class ParallelDualNetwork(DualNetwork):
                 zs.append(l(zs[-1]))
             nf.append(zs[-1].size())
 
-        dual_net = [select_input(X, epsilon, proj, norm_type, bounded_input)]
+        dual_net = [select_input(X, epsilon, proj, norm_type, bounded_input,l=input_l,u=input_u)]
 
         for i,(in_f,out_f,layer) in enumerate(zip(nf[:-1], nf[1:], net)): 
             if isinstance(layer, nn.ReLU): 
