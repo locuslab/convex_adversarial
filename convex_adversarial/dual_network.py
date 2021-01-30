@@ -132,6 +132,50 @@ class InputSequential(nn.Sequential):
                     xs.append(module(xs[-1]))
         return xs[-1]
 
+class ParallelDualNetwork(DualNetwork):   
+    def __init__(self, net, X, epsilon, 
+                 proj=None, norm_type='l1', bounded_input=False):
+        super(DualNetwork, self).__init__()
+
+        if any('BatchNorm2d' in str(l.__class__.__name__) for l in net): 
+            raise NotImplementedError
+        if X.size(0) != 1: 
+            raise ValueError('Only use this function for a single example. This is '
+                'intended for the use case when a single example does not fit in '
+                'memory.')
+        zs = [X[:1]]
+        nf = [zs[0].size()]
+        for l in net: 
+            if 'Dense' in type(l).__name__:
+                zs.append(l(*zs))
+            else:
+                zs.append(l(zs[-1]))
+            nf.append(zs[-1].size())
+
+        dual_net = [select_input(X, epsilon, proj, norm_type, bounded_input)]
+
+        for i,(in_f,out_f,layer) in enumerate(zip(nf[:-1], nf[1:], net)): 
+            if isinstance(layer, nn.ReLU): 
+                # compute bounds
+                D = (InputSequential(*dual_net[1:]))
+                Dp = nn.DataParallel(D)
+                zl,zu = 0,0
+                for j,dual_layer in enumerate(dual_net): 
+                    D.set_start(j)
+                    out = dual_layer.bounds(network=Dp)
+                    zl += out[0]
+                    zu += out[1]
+
+                dual_layer = select_layer(layer, dual_net, X, proj, norm_type,
+                    in_f, out_f, zs[i], zl=zl, zu=zu)
+            else:
+                dual_layer = select_layer(layer, dual_net, X, proj, norm_type,
+                    in_f, out_f, zs[i])
+            
+            dual_net.append(dual_layer)
+        self.dual_net = dual_net[:-1]
+        self.last_layer = dual_net[-1]
+
 
 # Data parallel versions of the loss calculation
 def robust_loss_parallel(net, epsilon, X, y, proj=None, 
