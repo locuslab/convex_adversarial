@@ -45,13 +45,14 @@ class InfBall(DualObject):
             nu_x = network(self.nu_x[0])
 
         epsilon = self.epsilon
-        l1 = nu_1.abs().sum(1)
         if isinstance(epsilon, torch.Tensor): 
-            while epsilon.dim() < nu_x.dim(): 
-                epsilon = epsilon.unsqueeze(1)
+            epsilon = epsilon.view(epsilon.size(0),-1)
+            while epsilon.dim() < nu_1.dim(): 
+                epsilon = epsilon.unsqueeze(-1)
 
-        return (nu_x - epsilon*l1, 
-                nu_x + epsilon*l1)
+        l1 = (epsilon*nu_1.abs()).sum(1)
+        return (nu_x - l1, 
+                nu_x + l1)
 
     def objective(self, *nus): 
         epsilon = self.epsilon
@@ -59,8 +60,8 @@ class InfBall(DualObject):
         nu = nu.view(nu.size(0), nu.size(1), -1)
         nu_x = nu.matmul(self.nu_x[0].view(self.nu_x[0].size(0),-1).unsqueeze(2)).squeeze(2)
         if isinstance(self.epsilon, torch.Tensor): 
-            while epsilon.dim() < nu.dim()-1: 
-                epsilon = epsilon.unsqueeze(1)
+            epsilon = epsilon.view(epsilon.size(0),1,-1)
+            
         l1 = (epsilon*nu.abs()).sum(2)
         return -nu_x - l1
 
